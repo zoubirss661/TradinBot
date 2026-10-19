@@ -1408,7 +1408,8 @@ def event_text(coin, tf, side, e, R, tier="free", trade=None):
     return None
 
 def _build_daily_lists(force_side=None):
-    binance_movers = _movers_from_binance_mirror(min_change=8.0, min_vol=5_000_000)
+    # تخفيف الفلاتر لضمان ظهور صفقات يومية
+    binance_movers = _movers_from_binance_mirror(min_change=4.0, min_vol=2_000_000)
     gainers = sorted([x for x in binance_movers if x["change"] > 0], key=lambda x: -x["change"])[:DAILY_TOP_N]
     losers = sorted([x for x in binance_movers if x["change"] < 0], key=lambda x: x["change"])[:DAILY_TOP_N]
     def build_item(sym, expected_side, mv):
@@ -1416,12 +1417,13 @@ def _build_daily_lists(force_side=None):
         except Exception: return None
         if df.empty or len(df) < 50: return None
         df = add_indicators(df, 50); i = len(df) - 1; last = df.iloc[-1]
-        price = float(last["close"]); ema50 = float(last["ema50"]) if not pd.isna(last["ema50"]) else price
+        price = float(last["close"])
         rsi_v = float(last["rsi"]) if not pd.isna(last["rsi"]) else 50.0
+        # الاعتماد على RSI فقط، بدون شرط EMA الصارم
         if expected_side == 1:
-            if price <= ema50 or not (40 <= rsi_v <= 85): return None
+            if not (30 <= rsi_v <= 85): return None
         else:
-            if price >= ema50 or not (15 <= rsi_v <= 60): return None
+            if not (15 <= rsi_v <= 70): return None
         lv = compute_core_levels(df, i, expected_side, price)
         if lv is None: return None
         return dict(res=dict(sym=sym, tf="1h", df=df, side=expected_side, strategy="Futures",
@@ -1580,12 +1582,13 @@ def golden_score(sym, debug=False, relaxed=False):
         price = current
         sl_dist = max(price * 0.05, min(price * 0.08, atr * 2.5))
         
+        # أهداف منطقية جداً (5%, 10%, 15%, 25%)
         if side == 1:
             sl = price - sl_dist
-            tps = [price * 1.10, price * 1.20, price * 1.35, price * 1.50]
+            tps = [price * 1.05, price * 1.10, price * 1.15, price * 1.25]
         else:
             sl = price + sl_dist
-            tps = [price * 0.90, price * 0.80, price * 0.65, price * 0.50]
+            tps = [price * 0.95, price * 0.90, price * 0.85, price * 0.75]
         
         risk = abs(price - sl)
         if risk <= 0 or any(tp <= 0 for tp in tps): return None
@@ -3548,7 +3551,7 @@ async def post_init(app):
         asyncio.create_task(golden_loop(app)), asyncio.create_task(promo_loop(app)),
         asyncio.create_task(whale_hunter_loop(app)),
     ]
-    log.info("ryma v83 | max_open=%d | golden_cycle=%ds | min_score=%d | multi=%s | maint=%s",
+    log.info("ryma v84 | max_open=%d | golden_cycle=%ds | min_score=%d | multi=%s | maint=%s",
              MAX_OPEN, CYCLE_GOLDEN, get_golden_config().get("min_score",1), is_multi_exchange(), is_maintenance())
 
 async def post_shutdown(app):
