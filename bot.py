@@ -1411,27 +1411,45 @@ def _build_daily_lists(force_side=None):
     binance_movers = _movers_from_binance_mirror(min_change=8.0, min_vol=5_000_000)
     gainers = sorted([x for x in binance_movers if x["change"] > 0], key=lambda x: -x["change"])[:DAILY_TOP_N]
     losers = sorted([x for x in binance_movers if x["change"] < 0], key=lambda x: x["change"])[:DAILY_TOP_N]
+    
     def build_item(sym, expected_side, mv):
-        try: df = get_candles(sym, "1h", 200, ttl=300, min_bars=50, binance_only=True)
+        try: 
+            df_1h = get_candles(sym, "1h", 200, ttl=300, min_bars=50, binance_only=True)
+            df_1d = get_candles(sym, "1d", 250, ttl=600, min_bars=200, binance_only=True)
         except Exception: return None
-        if df.empty or len(df) < 50: return None
-        df = add_indicators(df, 50); i = len(df) - 1; last = df.iloc[-1]
-        price = float(last["close"]); ema50 = float(last["ema50"]) if not pd.isna(last["ema50"]) else price
-        rsi_v = float(last["rsi"]) if not pd.isna(last["rsi"]) else 50.0
+        if df_1h.empty or df_1d.empty or len(df_1h) < 50 or len(df_1d) < 200: return None
+        
+        df_1h = add_indicators(df_1h, 50)
+        df_1d = add_indicators(df_1d, 50)
+        
+        i_1h = len(df_1h) - 1
+        i_1d = len(df_1d) - 1
+        last_1h = df_1h.iloc[i_1h]
+        
+        trend_1d = detect_trend(df_1d, i_1d)
+        price = float(last_1h["close"])
+        ema50_1h = float(last_1h["ema50"]) if not pd.isna(last_1h["ema50"]) else price
+        rsi_1h = float(last_1h["rsi"]) if not pd.isna(last_1h["rsi"]) else 50.0
+        
         if expected_side == 1:
-            if price <= ema50 or not (40 <= rsi_v <= 85): return None
+            if trend_1d not in ("up", "strong_up"): return None
+            if price <= ema50_1h or not (40 <= rsi_1h <= 85): return None
         else:
-            if price >= ema50 or not (15 <= rsi_v <= 60): return None
-        lv = compute_core_levels(df, i, expected_side, price)
+            if trend_1d not in ("down", "strong_down"): return None
+            if price >= ema50_1h or not (15 <= rsi_1h <= 60): return None
+            
+        lv = compute_core_levels(df_1h, i_1h, expected_side, price)
         if lv is None: return None
-        return dict(res=dict(sym=sym, tf="1h", df=df, side=expected_side, strategy="Futures",
+        
+        return dict(res=dict(sym=sym, tf="1h", df=df_1h, side=expected_side, strategy="Futures",
                              rank=2, grade="A", setup="Futures", ok=1, total=4,
                              lv=lv, price=price, degraded=False, source=mv.get("src", "binance_fut"),
-                             bar_t=int(last["t"]), rsi=rsi_v,
-                             macd=float(last["macd"]) if not pd.isna(last["macd"]) else 0.0,
-                             candle=None, trend=detect_trend(df, i), trend_d="range",
+                             bar_t=int(last_1h["t"]), rsi=rsi_1h,
+                             macd=float(last_1h["macd"]) if not pd.isna(last_1h["macd"]) else 0.0,
+                             candle=None, trend=trend_1d, trend_d=trend_1d,
                              sr_high=[], sr_low=[], fibs=[]),
                     change=mv.get("change", 0), volume=mv.get("volume", 0))
+
     longs, shorts = [], []; used = set()
     for g in gainers:
         if len(longs) >= DAILY_LONGS * 3: break
@@ -1450,9 +1468,14 @@ def _build_daily_lists(force_side=None):
 def _format_daily_card(res, side_label, change, volume):
     lv = res["lv"]; decision = "🟢 شراء" if res["side"] == 1 else "🔴 بيع"
     cl = coin_link(res['sym'], res.get("source", "binance_fut"))
+    
+    trend_map = {"strong_up":"صاعد قوي 🚀", "up":"صاعد 📈", "strong_down":"هابط قوي 📉", "down":"هابط 🔻", "range":"عرضي ↔️", "unknown":"—"}
+    trend_txt = trend_map.get(res.get("trend"), "—")
+    
     lines = [side_label, "",
              f"📌 <a href='{cl}'>#{res['sym']}/USDT</a> 👆 اضغط هنا",
              f"📡 {display_source(res.get('source','binance_fut'))}",
+             f"📊 الترند اليومي: <b>{trend_txt}</b>",
              f"➡️ Entry: {fmt(lv['entry'])}"]
     for i, tp in enumerate(lv["tps"][:DAILY_TP_COUNT], 1):
         lines.append(f"🎯 Target {i}: {fmt(tp['px'])}")
@@ -1657,10 +1680,7 @@ def build_whale_tweet(sym, side, notional, price):
     share_url = f"https://twitter.com/intent/tweet?text={urllib.parse.quote(text)}"
     return text, share_url
 
-# ==================== نصوص المنشور الاجتماعي ====================
-
 def build_social_text(res, platform="binance"):
-    """منشور نظيف: 4 TPs + رابط تداول (عمولة) + 3 عملات + like/share/follow + تحذير."""
     side = res["side"]; lv = res["lv"]; sym = res["sym"]
     side_word = "LONG 🟢" if side == 1 else "SHORT 🔴"
     meta = PLATFORM_META.get(platform, PLATFORM_META["binance"])
@@ -1697,7 +1717,6 @@ def build_social_text(res, platform="binance"):
     return text
 
 def build_clean_trade_text(res):
-    """نص نظيف جداً لزر نسخ الصفقة، مع رابط التداول."""
     side = res["side"]; lv = res["lv"]; sym = res["sym"]
     side_word = "LONG 🟢" if side == 1 else "SHORT 🔴"
     cl = coin_link(sym, res.get("source", "binance_fut"))
@@ -1725,7 +1744,6 @@ def build_share_urls(text, referral_url=None):
     }
 
 def keyboard_share_post(res):
-    """أزرار النشر: زرّان لكل منصة تداول (افتح + نسخ)، والتطبيقات الاجتماعية جاهزة."""
     sym = res["sym"]
     clean_text = build_clean_trade_text(res)
 
@@ -2724,7 +2742,7 @@ async def cmd_daily(update, ctx):
     try:
         longs, shorts = await asyncio.to_thread(_build_daily_lists)
         if not longs and not shorts:
-            await wait.edit_text("🎯 لا توجد صفقات مطابقة"); return
+            await wait.edit_text("🎯 لا توجد صفقات مطابقة للترند اليومي."); return
         await wait.delete()
         for idx, item in enumerate(longs, 1):
             txt = _format_daily_card(item["res"], f"🟢 LONG {idx}", item.get("change", 0), item.get("volume", 0))
@@ -3336,7 +3354,6 @@ async def cb_handler(update, ctx):
         except Exception: pass
         return
 
-    # نسخ نص منصة معينة (cpP: = copy per platform)
     if q.data.startswith("cpP:"):
         parts = q.data.split(":")
         if len(parts) == 3:
@@ -3536,7 +3553,7 @@ async def post_init(app):
         asyncio.create_task(golden_loop(app)), asyncio.create_task(promo_loop(app)),
         asyncio.create_task(whale_hunter_loop(app)),
     ]
-    log.info("ryma v80 | max_open=%d | golden_cycle=%ds | min_score=%d | multi=%s | maint=%s",
+    log.info("ryma v81 | max_open=%d | golden_cycle=%ds | min_score=%d | multi=%s | maint=%s",
              MAX_OPEN, CYCLE_GOLDEN, get_golden_config().get("min_score",1), is_multi_exchange(), is_maintenance())
 
 async def post_shutdown(app):
