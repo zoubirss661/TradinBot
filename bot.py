@@ -320,7 +320,7 @@ def user_status(uid, rec):
     if is_vip(uid): return "vip", 0
     
     actual_days = (now_s() - int(rec.get("first_seen", now_s()))) // DAY + 1
-    # 🎁 3 أيام هدية للجميع (إضافة 3 أيام للفترة التجريبية)
+    # 🎁 3 أيام هدية للجميع
     calculated_day = actual_days - 3 
     
     if calculated_day <= TRIAL_DAYS: return "trial", actual_days
@@ -1752,25 +1752,29 @@ def build_share_urls(text, referral_url=None):
 def keyboard_share_post(res):
     sym = res["sym"]
     clean_text = build_clean_trade_text(res)
-    
-    # ⚡ روابط التداول المباشرة (المسطرة اللي تحت)
-    trade_urls = {
-        "binance": f"https://www.binance.com/futures/{sym}USDT?ref=WELCOMBAKC",
-        "bybit": f"https://www.bybit.com/trade/usdt/{sym}USDT",
-        "okx": f"https://www.okx.com/trade-swap/{sym.lower()}-usdt-swap",
-        "bitget": f"https://www.bitget.com/futures/usdt/{sym}USDT",
-        "kucoin": f"https://www.kucoin.com/futures/trade/{sym}USDTM",
-        "gateio": f"https://www.gate.com/futures/USDT/{sym}_USDT",
+
+    platform_urls = {
+        "binance": "https://www.binance.com/en/square/post/create",
+        "bybit":   "https://www.bybit.com/en/copy-trading/",
+        "okx":     "https://www.okx.com/feed",
+        "bitget":  "https://www.bitget.com/en/copy-trading",
+        "kucoin":  "https://www.kucoin.com/copy-trade",
+        "gateio":  "https://www.gate.io/copy-trading",
     }
-    
-    trade_rows = [
-        [InlineKeyboardButton(f"⚡ تداول {sym} على Binance", url=trade_urls["binance"])],
-        [InlineKeyboardButton(f"⚡ تداول {sym} على Bybit", url=trade_urls["bybit"]),
-         InlineKeyboardButton(f"⚡ تداول {sym} على OKX", url=trade_urls["okx"])],
-        [InlineKeyboardButton(f"⚡ تداول {sym} على Bitget", url=trade_urls["bitget"]),
-         InlineKeyboardButton(f"⚡ تداول {sym} على KuCoin", url=trade_urls["kucoin"])],
-        [InlineKeyboardButton(f"⚡ تداول {sym} على Gate", url=trade_urls["gateio"])],
+    trade_meta = [
+        ("binance", "🟡", "Binance"),
+        ("bybit",   "🔵", "Bybit"),
+        ("okx",     "⚫", "OKX"),
+        ("bitget",  "🟢", "Bitget"),
+        ("kucoin",  "🟢", "KuCoin"),
+        ("gateio",  "⚪", "Gate"),
     ]
+    trade_rows = []
+    for key, emoji, name in trade_meta:
+        trade_rows.append([
+            InlineKeyboardButton(f"{emoji} {name} — افتح", url=platform_urls[key]),
+            InlineKeyboardButton(f"📋 نسخ لـ {name}", callback_data=f"cpP:{key}:{sym}"),
+        ])
 
     texts = {p: build_social_text(res, p) for p in PLATFORM_META}
     ref = REFERRAL_LINKS["binance"][1]
@@ -3555,7 +3559,7 @@ async def post_init(app):
         asyncio.create_task(golden_loop(app)), asyncio.create_task(promo_loop(app)),
         asyncio.create_task(whale_hunter_loop(app)),
     ]
-    log.info("ryma v88 | max_open=%d | golden_cycle=%ds | min_score=%d | multi=%s | maint=%s",
+    log.info("ryma v89 | max_open=%d | golden_cycle=%ds | min_score=%d | multi=%s | maint=%s",
              MAX_OPEN, CYCLE_GOLDEN, get_golden_config().get("min_score",1), is_multi_exchange(), is_maintenance())
 
 async def post_shutdown(app):
