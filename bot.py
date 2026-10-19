@@ -741,7 +741,7 @@ def whale_radar(sym):
                 for t in trades:
                     notional = float(t.get("price",0)) * float(t.get("amount",0))
                     largest = max(largest, notional)
-                    if notional >= 5000: # 🔥 خففنا المبلغ
+                    if notional >= 5000: 
                         large += 1
                         if t.get("side") == "buy": buy_vol += notional
                         elif t.get("side") == "sell": sell_vol += notional
@@ -771,7 +771,7 @@ def explosion_radar(sym):
         last_vol = float(df["volume"].iloc[-1]); avg_vol = float(df["volume"].iloc[-20:-1].mean())
         if avg_vol <= 0: return None
         vol_ratio = round(last_vol/avg_vol, 2)
-        if vol_ratio >= 1.2: # 🔥 خففنا الشرط
+        if vol_ratio >= 1.2: 
             return dict(vol_ratio=vol_ratio, price_change=round((float(df["close"].iloc[-1])/float(df["close"].iloc[-5])-1)*100, 2))
         return None
     except Exception: return None
@@ -785,7 +785,7 @@ def pump_radar(sym):
         last_vol = float(df["volume"].iloc[-1]); avg_vol = float(df["volume"].iloc[-20:-1].mean())
         if avg_vol <= 0: return None
         vol_ratio = last_vol / avg_vol
-        if change_1h > 0.5 and vol_ratio > 1.0: # 🔥 خففنا الشرط جداً
+        if change_1h > 0.5 and vol_ratio > 1.0: 
             return dict(change_1h=round(change_1h,2), change_4h=round(change_4h,2), vol_ratio=round(vol_ratio,2))
         return None
     except Exception: return None
@@ -823,7 +823,7 @@ def short_radar(sym):
         if df.empty or len(df) < 100: return None
         df = add_indicators(df, 100); last = df.iloc[-1]
         if pd.isna(last["rsi"]): return None
-        if last["rsi"] > 55: # 🔥 خففنا الشرط جداً
+        if last["rsi"] > 55: 
             return dict(rsi=round(float(last["rsi"]),1), price=round(float(last["close"]),6))
         return None
     except Exception: return None
@@ -1381,17 +1381,12 @@ def event_text(coin, tf, side, e, R, tier="free", trade=None):
         return headers.get(k, "") + card
     return None
 
-# ========================================================
-# إصلاح صفقة اليوم (ضمان 2 لونج و 2 شورت + فلتر الأمان)
-# ========================================================
 def _build_daily_lists(force_side=None):
     binance_movers = _movers_from_binance_mirror(min_change=1.0, min_vol=1_000_000)
     binance_movers = [x for x in binance_movers if abs(x["change"]) <= 20.0 and x["symbol"] not in EXCLUDE_TICKERS]
-    
     if not binance_movers:
         top_syms = top_symbols(50)
         binance_movers = [dict(symbol=s, change=0, price=0, volume=10_000_000, src="binance_fut") for s in top_syms if s not in EXCLUDE_TICKERS]
-        
     gainers = sorted([x for x in binance_movers if x["change"] >= 0], key=lambda x: -x["change"])
     losers = sorted([x for x in binance_movers if x["change"] < 0], key=lambda x: x["change"])
 
@@ -1399,22 +1394,17 @@ def _build_daily_lists(force_side=None):
         try: df = get_candles(sym, "1h", 200, ttl=300, min_bars=50, binance_only=True)
         except Exception: return None
         if df.empty or len(df) < 50: return None
-        
         df = add_indicators(df, 50); i = len(df) - 1; last = df.iloc[-1]
         live_p, _ = live_price(sym)
         price = float(live_p) if live_p else float(last["close"])
-        
         rsi_v = float(last["rsi"]) if not pd.isna(last["rsi"]) else 50.0
         trend = detect_trend(df, i)
-        
         if expected_side == 1:
             if trend == "strong_down" or rsi_v < 30: return None
         else:
             if trend == "strong_up" or rsi_v > 70: return None
-            
         lv = compute_core_levels(df, i, expected_side, price)
         if lv is None: return None
-        
         return dict(res=dict(sym=sym, tf="1h", df=df, side=expected_side, strategy="Futures",
                              rank=2, grade="A", setup="Futures", ok=1, total=4,
                              lv=lv, price=price, degraded=False, source=mv.get("src", "binance_fut"),
@@ -1425,33 +1415,28 @@ def _build_daily_lists(force_side=None):
                     change=mv.get("change", 0), volume=mv.get("volume", 0))
 
     longs, shorts = [], []; used = set()
-    
     for g in gainers:
         if len(longs) >= 2: break
         if g["symbol"] in used: continue
         item = build_item(g["symbol"], 1, g)
         if item: longs.append(item); used.add(g["symbol"])
-        
     for l in losers:
         if len(shorts) >= 2: break
         if l["symbol"] in used: continue
         item = build_item(l["symbol"], -1, l)
         if item: shorts.append(item); used.add(l["symbol"])
-        
     if len(longs) < 2:
         for s in top_symbols(50):
             if len(longs) >= 2: break
             if s in used or s in EXCLUDE_TICKERS: continue
             item = build_item(s, 1, dict(symbol=s, change=0, volume=10_000_000, src="binance_fut"))
             if item: longs.append(item); used.add(s)
-            
     if len(shorts) < 2:
         for s in top_symbols(50):
             if len(shorts) >= 2: break
             if s in used or s in EXCLUDE_TICKERS: continue
             item = build_item(s, -1, dict(symbol=s, change=0, volume=10_000_000, src="binance_fut"))
             if item: shorts.append(item); used.add(s)
-
     return longs[:2], shorts[:2]
 
 def _format_daily_card(res, side_label, change, volume):
@@ -1468,9 +1453,6 @@ def _format_daily_card(res, side_label, change, volume):
               f"📊 {'🔺' if change >= 0 else '🔻'} {change:+.1f}% | 💰 ${volume/1_000_000:.1f}M"]
     return "\n".join(lines)
 
-# ========================================================
-# إصلاح الفرصة الذهبية (توحيد الاتجاه + أهداف 5/10/15/25)
-# ========================================================
 def golden_score(sym, debug=False, relaxed=False):
     cfg = dict(get_golden_config())
     if relaxed:
@@ -1690,16 +1672,12 @@ def build_whale_tweet(sym, side, notional, price):
     share_url = f"https://twitter.com/intent/tweet?text={urllib.parse.quote(text)}"
     return text, share_url
 
-# ========================================================
-# نصوص المنشورات + روابط العمولة (احترافية)
-# ========================================================
 def build_social_text(res, platform="binance"):
     side = res["side"]; lv = res["lv"]; sym = res["sym"]
     side_word = "LONG 🟢" if side == 1 else "SHORT 🔴"
     meta = PLATFORM_META.get(platform, PLATFORM_META["binance"])
     emoji = meta["emoji"]
     
-    # 🔥 تحديد رابط التداول الصحيح لكل منصة
     sym_u = sym.upper()
     if platform == "binance":
         trade_link = f"https://www.binance.com/futures/{sym_u}USDT?ref=WELCOMBAKC"
@@ -1717,7 +1695,6 @@ def build_social_text(res, platform="binance"):
         trade_link = coin_link(sym, res.get("source", "binance_fut"))
 
     coins = hot_coins_for(sym)
-    # 🔥 هاشتاجين بس (العملة + عملة تانية قوية)
     other_coin = next((c for c in coins if c != sym), "BTC")
     coin_tags = f"#{sym} #{other_coin}"
     platform_tags = meta["tags"]
@@ -1751,14 +1728,14 @@ def build_social_text(res, platform="binance"):
 def keyboard_share_post(res):
     sym = res["sym"]
     
-    # روابط تطبيقات مباشرة (Deep Links)
-    app_links = {
-        "binance": "binance://",
-        "bybit": "bybitapp://",
-        "okx": "okx://",
-        "bitget": "bitget://",
-        "kucoin": "kucoin://",
-        "gateio": "gateio://"
+    # روابط المتصفح (تيليجرام يرفض روابط التطبيقات المباشرة)
+    platform_urls = {
+        "binance": "https://www.binance.com/en/square/post/create",
+        "bybit":   "https://www.bybit.com/en/copy-trading/",
+        "okx":     "https://www.okx.com/feed",
+        "bitget":  "https://www.bitget.com/en/copy-trading",
+        "kucoin":  "https://www.kucoin.com/copy-trade",
+        "gateio":  "https://www.gate.io/copy-trading",
     }
     
     trade_meta = [
@@ -1772,14 +1749,14 @@ def keyboard_share_post(res):
     
     trade_rows = []
     for key, emoji, name in trade_meta:
-        # 🔥 نص مختصر جداً مخصوص لزر النسخ (أقل من 256 حرف عشان تيليجرام ميرفضوش)
+        # نص مختصر جداً لزر النسخ (أقل من 256 حرف)
         short_text = (
             f"#{sym} {'LONG🟢' if res['side']==1 else 'SHORT🔴'} | 💵 {fmt(res['lv']['entry'])} | "
             f"🎯 {fmt(res['lv']['tps'][0]['px'])} | {fmt(res['lv']['tps'][1]['px'])} | {fmt(res['lv']['tps'][2]['px'])} | "
             f"🛑 {fmt(res['lv']['sl'])} | 👉 {coin_link(sym, key)}"
         )
         trade_rows.append([
-            InlineKeyboardButton(f"{emoji} {name} — افتح", url=app_links.get(key, "https://www.google.com")),
+            InlineKeyboardButton(f"{emoji} {name} — افتح", url=platform_urls[key]),
             InlineKeyboardButton(f"📋 نسخ لـ {name}", copy_text=CopyTextButton(text=short_text)),
         ])
 
@@ -3581,7 +3558,7 @@ async def post_init(app):
         asyncio.create_task(golden_loop(app)), asyncio.create_task(promo_loop(app)),
         asyncio.create_task(whale_hunter_loop(app)),
     ]
-    log.info("ryma v94 | max_open=%d | golden_cycle=%ds | min_score=%d | multi=%s | maint=%s",
+    log.info("ryma v95 | max_open=%d | golden_cycle=%ds | min_score=%d | multi=%s | maint=%s",
              MAX_OPEN, CYCLE_GOLDEN, get_golden_config().get("min_score",1), is_multi_exchange(), is_maintenance())
 
 async def post_shutdown(app):
