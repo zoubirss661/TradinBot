@@ -320,7 +320,6 @@ def user_status(uid, rec):
     if is_vip(uid): return "vip", 0
     
     actual_days = (now_s() - int(rec.get("first_seen", now_s()))) // DAY + 1
-    # 🎁 3 أيام هدية للجميع
     calculated_day = actual_days - 3 
     
     if calculated_day <= TRIAL_DAYS: return "trial", actual_days
@@ -1379,10 +1378,14 @@ def event_text(coin, tf, side, e, R, tier="free", trade=None):
     return None
 
 # ========================================================
-# إصلاح صفقة اليوم (ضمان 2 لونج و 2 شورت دائماً)
+# إصلاح صفقة اليوم (ضمان 2 لونج و 2 شورت + فلتر الأمان)
 # ========================================================
 def _build_daily_lists(force_side=None):
     binance_movers = _movers_from_binance_mirror(min_change=1.0, min_vol=1_000_000)
+    
+    # 🔥 فلتر الأمان: استبعاد العملات التي تحركت أكثر من 20% لتفادي الملاحقة
+    binance_movers = [x for x in binance_movers if abs(x["change"]) <= 20.0]
+    
     if not binance_movers:
         top_syms = top_symbols(50)
         binance_movers = [dict(symbol=s, change=0, price=0, volume=10_000_000, src="binance_fut") for s in top_syms]
@@ -1396,7 +1399,11 @@ def _build_daily_lists(force_side=None):
         if df.empty or len(df) < 50: return None
         
         df = add_indicators(df, 50); i = len(df) - 1; last = df.iloc[-1]
-        price = float(last["close"])
+        
+        # 🔥 استخدام السعر المباشر الحالي بدلاً من إغلاق الشمعة القديمة
+        live_p, _ = live_price(sym)
+        price = float(live_p) if live_p else float(last["close"])
+        
         rsi_v = float(last["rsi"]) if not pd.isna(last["rsi"]) else 50.0
         trend = detect_trend(df, i)
         
@@ -3559,7 +3566,7 @@ async def post_init(app):
         asyncio.create_task(golden_loop(app)), asyncio.create_task(promo_loop(app)),
         asyncio.create_task(whale_hunter_loop(app)),
     ]
-    log.info("ryma v89 | max_open=%d | golden_cycle=%ds | min_score=%d | multi=%s | maint=%s",
+    log.info("ryma v90 | max_open=%d | golden_cycle=%ds | min_score=%d | multi=%s | maint=%s",
              MAX_OPEN, CYCLE_GOLDEN, get_golden_config().get("min_score",1), is_multi_exchange(), is_maintenance())
 
 async def post_shutdown(app):
