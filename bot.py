@@ -50,42 +50,18 @@ REFERRAL_LINKS = {
 }
 
 PLATFORM_META = {
-    "binance":  {"emoji": "🟡", "name": "Binance Square",
-                 "compose": "https://www.binance.com/en/square/post/create",
-                 "tags": "#BinanceSquare #Crypto #Futures",
-                 "ref": "binance"},
-    "bybit":    {"emoji": "🔵", "name": "Bybit",
-                 "compose": "https://www.bybit.com/en/copy-trading/",
-                 "tags": "#Bybit #CopyTrading #Crypto",
-                 "ref": "bybit"},
-    "okx":      {"emoji": "⚫", "name": "OKX",
-                 "compose": "https://www.okx.com/feed",
-                 "tags": "#OKX #Web3 #Crypto",
-                 "ref": "okx"},
-    "bitget":   {"emoji": "🟢", "name": "Bitget",
-                 "compose": "https://www.bitget.com/en/copy-trading",
-                 "tags": "#Bitget #CopyTrading #Crypto",
-                 "ref": "bitget"},
-    "kucoin":   {"emoji": "🟢", "name": "KuCoin",
-                 "compose": "https://www.kucoin.com/copy-trade",
-                 "tags": "#KuCoin #Altcoins #Crypto",
-                 "ref": "kucoin"},
-    "gateio":   {"emoji": "⚪", "name": "Gate.io",
-                 "compose": "https://www.gate.io/copy-trading",
-                 "tags": "#Gateio #Web3 #Crypto",
-                 "ref": "gateio"},
-    "twitter":  {"emoji": "🐦", "name": "Twitter (X)",
-                 "compose": None, "tags": "#Crypto #Trading #Futures", "ref": "binance"},
-    "telegram": {"emoji": "📱", "name": "Telegram",
-                 "compose": None, "tags": "#Crypto #Trading", "ref": "binance"},
-    "facebook": {"emoji": "📘", "name": "Facebook",
-                 "compose": None, "tags": "#Crypto #Trading", "ref": "binance"},
-    "whatsapp": {"emoji": "💬", "name": "WhatsApp",
-                 "compose": None, "tags": "#Crypto", "ref": "binance"},
-    "reddit":   {"emoji": "🔴", "name": "Reddit",
-                 "compose": None, "tags": "#Crypto #Trading", "ref": "binance"},
-    "discord":  {"emoji": "🎮", "name": "Discord",
-                 "compose": None, "tags": "#Crypto #Trading", "ref": "binance"},
+    "binance":  {"emoji": "🟡", "name": "Binance Square", "compose": "https://www.binance.com/en/square/post/create", "tags": "#BinanceSquare #Crypto #Futures", "ref": "binance"},
+    "bybit":    {"emoji": "🔵", "name": "Bybit", "compose": "https://www.bybit.com/en/copy-trading/", "tags": "#Bybit #CopyTrading #Crypto", "ref": "bybit"},
+    "okx":      {"emoji": "⚫", "name": "OKX", "compose": "https://www.okx.com/feed", "tags": "#OKX #Web3 #Crypto", "ref": "okx"},
+    "bitget":   {"emoji": "🟢", "name": "Bitget", "compose": "https://www.bitget.com/en/copy-trading", "tags": "#Bitget #CopyTrading #Crypto", "ref": "bitget"},
+    "kucoin":   {"emoji": "🟢", "name": "KuCoin", "compose": "https://www.kucoin.com/copy-trade", "tags": "#KuCoin #Altcoins #Crypto", "ref": "kucoin"},
+    "gateio":   {"emoji": "⚪", "name": "Gate.io", "compose": "https://www.gate.io/copy-trading", "tags": "#Gateio #Web3 #Crypto", "ref": "gateio"},
+    "twitter":  {"emoji": "🐦", "name": "Twitter (X)", "compose": None, "tags": "#Crypto #Trading #Futures", "ref": "binance"},
+    "telegram": {"emoji": "📱", "name": "Telegram", "compose": None, "tags": "#Crypto #Trading", "ref": "binance"},
+    "facebook": {"emoji": "📘", "name": "Facebook", "compose": None, "tags": "#Crypto #Trading", "ref": "binance"},
+    "whatsapp": {"emoji": "💬", "name": "WhatsApp", "compose": None, "tags": "#Crypto", "ref": "binance"},
+    "reddit":   {"emoji": "🔴", "name": "Reddit", "compose": None, "tags": "#Crypto #Trading", "ref": "binance"},
+    "discord":  {"emoji": "🎮", "name": "Discord", "compose": None, "tags": "#Crypto #Trading", "ref": "binance"},
 }
 
 def referral_for(source):
@@ -101,8 +77,7 @@ def display_source(src):
 def coin_link(sym, source="binance_fut"):
     s = (source or "binance").lower()
     sym_u = sym.upper()
-    if s.startswith("binance"):
-        return f"https://www.binance.com/futures/{sym_u}USDT?ref=WELCOMBAKC"
+    if s.startswith("binance"): return f"https://www.binance.com/futures/{sym_u}USDT?ref=WELCOMBAKC"
     if s == "okx":     return f"https://www.okx.com/trade-swap/{sym_u.lower()}-usdt-swap"
     if s == "bybit":   return f"https://www.bybit.com/trade/usdt/{sym_u}USDT"
     if s == "gateio":  return f"https://www.gate.com/futures/USDT/{sym_u}_USDT"
@@ -113,12 +88,10 @@ def coin_link(sym, source="binance_fut"):
     return REFERRAL_LINKS["binance"][1]
 
 FAST_EXCHANGES = ["okx", "bybit", "gateio", "mexc", "kucoin", "bitget", "htx", "binance"]
-EXCHANGES = ["okx", "bybit", "gateio", "mexc", "kucoin", "bitget", "htx",
-             "binance", "bingx", "lbank", "bitmart", "poloniex"]
+EXCHANGES = ["okx", "bybit", "gateio", "mexc", "kucoin", "bitget", "htx", "binance", "bingx", "lbank", "bitmart", "poloniex"]
 
 BINANCE_FAPI_BASE = "https://fapi.binance.com"
-BINANCE_SPOT_MIRRORS = ["https://data-api.binance.vision", "https://api1.binance.com",
-                        "https://api2.binance.com", "https://api3.binance.com"]
+BINANCE_SPOT_MIRRORS = ["https://data-api.binance.vision", "https://api1.binance.com", "https://api2.binance.com", "https://api3.binance.com"]
 BINANCE_INTERVAL_MAP = {"15m": "15m", "1h": "1h", "4h": "4h", "1d": "1d"}
 
 MAJORS = {"BTC","ETH","BNB","SOL","XRP","ADA","DOGE","AVAX","LINK","DOT","LTC","TRX"}
@@ -127,9 +100,7 @@ MEME_COINS = ["TIA","FLOKI","SOL","DOT","INJ"]
 ALPHA_COINS = ["ETH","BNB","SOL","SUI","NEAR","INJ","TIA","FLOKI","APT","ARB"]
 COINS = CORE_COINS + MEME_COINS
 WEAK_COINS = set()
-DAILY_EXCLUDE = {"BTC","ETH","BNB","SOL","XRP","DOGE","ADA","TRX","LTC","DOT","LINK","AVAX","TON",
-                 "SHIB","PEPE","USDC","FDUSD","TUSD","USDT","DAI","BUSD","USDP","USDD","USDE",
-                 "PYUSD","EUR","AEUR"}
+DAILY_EXCLUDE = {"BTC","ETH","BNB","SOL","XRP","DOGE","ADA","TRX","LTC","DOT","LINK","AVAX","TON","SHIB","PEPE","USDC","FDUSD","TUSD","USDT","DAI","BUSD","USDP","USDD","USDE","PYUSD","EUR","AEUR"}
 STABLES = DAILY_EXCLUDE
 
 TRIAL_DAYS = 7
@@ -228,14 +199,9 @@ DAY = 86400
 def now_s(): return int(time.time())
 
 DEFAULT_GOLDEN_CONFIG = {
-    "require_1d_trend": False,
-    "require_mtf": False,
-    "require_rsi": True,
-    "require_volume": False,
-    "require_breakout": False,
-    "require_liquidity": False,
-    "require_alpha": False,
-    "min_score": 1,
+    "require_1d_trend": False, "require_mtf": False, "require_rsi": True,
+    "require_volume": False, "require_breakout": False, "require_liquidity": False,
+    "require_alpha": False, "min_score": 1,
 }
 
 KEYS = ["users","vip","signals","history","posted","settings"]
@@ -348,13 +314,18 @@ def touch_user(user, cmd="text"):
 
 def vip_until(uid): return int(store.data["vip"].get(str(uid),{}).get("expires",0))
 def is_vip(uid): return vip_until(uid) > now_s()
+
 def user_status(uid, rec):
     if ADMIN_ID and uid == ADMIN_ID: return "admin", 0
     if is_vip(uid): return "vip", 0
-    day = (now_s() - int(rec.get("first_seen", now_s()))) // DAY + 1
-    if day <= TRIAL_DAYS: return "trial", day
-    if day < VIP_FORCE_DAY: return "warning", day
-    return "blocked", day
+    
+    actual_days = (now_s() - int(rec.get("first_seen", now_s()))) // DAY + 1
+    # 🎁 3 أيام هدية للجميع (إضافة 3 أيام للفترة التجريبية)
+    calculated_day = actual_days - 3 
+    
+    if calculated_day <= TRIAL_DAYS: return "trial", actual_days
+    if calculated_day < VIP_FORCE_DAY: return "warning", actual_days
+    return "blocked", actual_days
 
 def add_vip(uid, days):
     with store.lock:
@@ -1408,13 +1379,10 @@ def event_text(coin, tf, side, e, R, tier="free", trade=None):
     return None
 
 # ========================================================
-# إصلاح صفقة اليوم (ضمان 2 LONG و 2 SHORT)
+# إصلاح صفقة اليوم (ضمان 2 لونج و 2 شورت دائماً)
 # ========================================================
 def _build_daily_lists(force_side=None):
-    # 1. فلترة بسيطة جداً
     binance_movers = _movers_from_binance_mirror(min_change=1.0, min_vol=1_000_000)
-    
-    # 2. لو مفيش حركة، نجيب أعلى 50 عملة سيولة
     if not binance_movers:
         top_syms = top_symbols(50)
         binance_movers = [dict(symbol=s, change=0, price=0, volume=10_000_000, src="binance_fut") for s in top_syms]
@@ -1432,7 +1400,6 @@ def _build_daily_lists(force_side=None):
         rsi_v = float(last["rsi"]) if not pd.isna(last["rsi"]) else 50.0
         trend = detect_trend(df, i)
         
-        # فلاتر مرنة جداً للترند
         if expected_side == 1:
             if trend == "strong_down" or rsi_v < 30: return None
         else:
@@ -1452,7 +1419,6 @@ def _build_daily_lists(force_side=None):
 
     longs, shorts = [], []; used = set()
     
-    # المحاولة الأولى: من العملات المتحركة
     for g in gainers:
         if len(longs) >= 2: break
         if g["symbol"] in used: continue
@@ -1465,7 +1431,6 @@ def _build_daily_lists(force_side=None):
         item = build_item(l["symbol"], -1, l)
         if item: shorts.append(item); used.add(l["symbol"])
         
-    # المحاولة التانية (الإجبارية): لو ناقص لونج، نلف على أعلى 50 عملة
     if len(longs) < 2:
         for s in top_symbols(50):
             if len(longs) >= 2: break
@@ -1473,7 +1438,6 @@ def _build_daily_lists(force_side=None):
             item = build_item(s, 1, dict(symbol=s, change=0, volume=10_000_000, src="binance_fut"))
             if item: longs.append(item); used.add(s)
             
-    # المحاولة التالتة (الإجبارية): لو ناقص شورت، نلف على أعلى 50 عملة
     if len(shorts) < 2:
         for s in top_symbols(50):
             if len(shorts) >= 2: break
@@ -1498,7 +1462,7 @@ def _format_daily_card(res, side_label, change, volume):
     return "\n".join(lines)
 
 # ========================================================
-# إصلاح الفرصة الذهبية (توحيد الاتجاه 100%)
+# إصلاح الفرصة الذهبية (توحيد الاتجاه + أهداف 5/10/15/25)
 # ========================================================
 def golden_score(sym, debug=False, relaxed=False):
     cfg = dict(get_golden_config())
@@ -1518,7 +1482,6 @@ def golden_score(sym, debug=False, relaxed=False):
         trend_1d = detect_trend(df_1d, len(df_1d)-1)
         trend_4h = detect_trend(df_4h, len(df_4h)-1)
         
-        # الحل السحري: توحيد الاتجاه مع التحليل العادي (بناءً على الفريم الأساسي)
         tf_main = default_tf(sym)
         df_main = df_1d if tf_main == "1d" else df_4h
         trend_main = trend_1d if tf_main == "1d" else trend_4h
@@ -1526,6 +1489,7 @@ def golden_score(sym, debug=False, relaxed=False):
         long_ok = detect_core_conditions(df_main, len(df_main)-1, 1)
         short_ok = detect_core_conditions(df_main, len(df_main)-1, -1)
         bias_d = daily_bias(df_1d)
+        
         side = decide_side(df_main, len(df_main)-1, trend_main, bias_d, long_ok, short_ok)
         
         if side == 1:
@@ -1624,7 +1588,6 @@ def golden_score(sym, debug=False, relaxed=False):
         price = current
         sl_dist = max(price * 0.05, min(price * 0.08, atr * 2.5))
         
-        # أهداف منطقية للفرصة الذهبية (5/10/15/25)
         if side == 1:
             sl = price - sl_dist
             tps = [price * 1.05, price * 1.10, price * 1.15, price * 1.25]
@@ -1720,6 +1683,9 @@ def build_whale_tweet(sym, side, notional, price):
     share_url = f"https://twitter.com/intent/tweet?text={urllib.parse.quote(text)}"
     return text, share_url
 
+# ========================================================
+# نصوص المنشورات + روابط العمولة
+# ========================================================
 def build_social_text(res, platform="binance"):
     side = res["side"]; lv = res["lv"]; sym = res["sym"]
     side_word = "LONG 🟢" if side == 1 else "SHORT 🔴"
@@ -1786,29 +1752,25 @@ def build_share_urls(text, referral_url=None):
 def keyboard_share_post(res):
     sym = res["sym"]
     clean_text = build_clean_trade_text(res)
-
-    platform_urls = {
-        "binance": "https://www.binance.com/en/square/post/create",
-        "bybit":   "https://www.bybit.com/en/copy-trading/",
-        "okx":     "https://www.okx.com/feed",
-        "bitget":  "https://www.bitget.com/en/copy-trading",
-        "kucoin":  "https://www.kucoin.com/copy-trade",
-        "gateio":  "https://www.gate.io/copy-trading",
+    
+    # ⚡ روابط التداول المباشرة (المسطرة اللي تحت)
+    trade_urls = {
+        "binance": f"https://www.binance.com/futures/{sym}USDT?ref=WELCOMBAKC",
+        "bybit": f"https://www.bybit.com/trade/usdt/{sym}USDT",
+        "okx": f"https://www.okx.com/trade-swap/{sym.lower()}-usdt-swap",
+        "bitget": f"https://www.bitget.com/futures/usdt/{sym}USDT",
+        "kucoin": f"https://www.kucoin.com/futures/trade/{sym}USDTM",
+        "gateio": f"https://www.gate.com/futures/USDT/{sym}_USDT",
     }
-    trade_meta = [
-        ("binance", "🟡", "Binance"),
-        ("bybit",   "🔵", "Bybit"),
-        ("okx",     "⚫", "OKX"),
-        ("bitget",  "🟢", "Bitget"),
-        ("kucoin",  "🟢", "KuCoin"),
-        ("gateio",  "⚪", "Gate"),
+    
+    trade_rows = [
+        [InlineKeyboardButton(f"⚡ تداول {sym} على Binance", url=trade_urls["binance"])],
+        [InlineKeyboardButton(f"⚡ تداول {sym} على Bybit", url=trade_urls["bybit"]),
+         InlineKeyboardButton(f"⚡ تداول {sym} على OKX", url=trade_urls["okx"])],
+        [InlineKeyboardButton(f"⚡ تداول {sym} على Bitget", url=trade_urls["bitget"]),
+         InlineKeyboardButton(f"⚡ تداول {sym} على KuCoin", url=trade_urls["kucoin"])],
+        [InlineKeyboardButton(f"⚡ تداول {sym} على Gate", url=trade_urls["gateio"])],
     ]
-    trade_rows = []
-    for key, emoji, name in trade_meta:
-        trade_rows.append([
-            InlineKeyboardButton(f"{emoji} {name} — افتح", url=platform_urls[key]),
-            InlineKeyboardButton(f"📋 نسخ لـ {name}", callback_data=f"cpP:{key}:{sym}"),
-        ])
 
     texts = {p: build_social_text(res, p) for p in PLATFORM_META}
     ref = REFERRAL_LINKS["binance"][1]
@@ -2649,7 +2611,7 @@ def vip_only(fn):
         if not u: return
         rec = store.data["users"].get(str(u.id), {})
         st, _ = user_status(u.id, rec)
-        if st not in ("admin","vip"):
+        if st not in ("admin","vip","trial","warning"):
             kb = InlineKeyboardMarkup([[InlineKeyboardButton("💎 اشترك في VIP", url=VIP_INVITE_LINK)]])
             await update.message.reply_text("🔒 VIP فقط", reply_markup=kb); return
         try: return await fn(update, ctx)
@@ -2765,7 +2727,7 @@ async def cmd_menu(update, ctx):
     if st == "admin":
         await update.message.reply_text(build_admin_menu_text(),
                                         reply_markup=keyboard_admin_menu(), parse_mode=ParseMode.HTML); return
-    if st != "vip":
+    if st not in ("vip","trial","warning"):
         kb = InlineKeyboardMarkup([[InlineKeyboardButton("💎 اشترك في VIP", url=VIP_INVITE_LINK)]])
         await update.message.reply_text("🔒 القائمة لمشتركي VIP فقط", reply_markup=kb); return
     await update.message.reply_text(build_vip_menu_text(), reply_markup=keyboard_vip_menu())
@@ -2774,11 +2736,11 @@ async def cmd_daily(update, ctx):
     u = update.effective_user
     if not u: return
     rec = store.data["users"].get(str(u.id), {}); st, _ = user_status(u.id, rec)
-    if st not in ("admin", "vip"):
+    if st not in ("admin", "vip", "trial", "warning"):
         kb = InlineKeyboardMarkup([[InlineKeyboardButton("💎 اشترك في VIP", url=VIP_INVITE_LINK)]])
-        await update.message.reply_text("🔒 الأمر حصري للأدمن ومشتركي VIP", reply_markup=kb); return
+        await update.message.reply_text("🔒 الأمر حصري للمشتركين", reply_markup=kb); return
     touch_user(u, "/daily")
-    wait = await update.message.reply_text("🎯 جلب Top Movers من Binance Futures...")
+    wait = await update.message.reply_text("🎯 جلب Top Movers...")
     try:
         longs, shorts = await asyncio.to_thread(_build_daily_lists)
         if not longs and not shorts:
@@ -3477,7 +3439,7 @@ async def cb_handler(update, ctx):
     if q.data == "vip_menu":
         u = q.from_user; rec = store.data["users"].get(str(u.id), {})
         st, _ = user_status(u.id, rec)
-        if st not in ("admin","vip"):
+        if st not in ("admin","vip","trial","warning"):
             await q.message.reply_text("🔒 VIP فقط"); return
         await q.message.reply_text(build_vip_menu_text(), reply_markup=keyboard_vip_menu())
         return
@@ -3486,7 +3448,7 @@ async def cb_handler(update, ctx):
         key = q.data.split(":", 1)[1]
         u = q.from_user; rec = store.data["users"].get(str(u.id), {})
         st, _ = user_status(u.id, rec)
-        if st not in ("admin","vip"):
+        if st not in ("admin","vip","trial","warning"):
             await q.message.reply_text("🔒 VIP فقط"); return
         hints = {"liquidity": "💧 /liquidity BTC", "futures": "📊 /futures BTC"}
         await q.message.reply_text(f"✏️ {hints.get(key, 'الأمر مع الرمز')}")
@@ -3496,7 +3458,7 @@ async def cb_handler(update, ctx):
         cmd = q.data.split(":",1)[1]
         u = q.from_user; rec = store.data["users"].get(str(u.id), {})
         st, _ = user_status(u.id, rec)
-        if st not in ("admin","vip"):
+        if st not in ("admin","vip","trial","warning"):
             await q.message.reply_text("🔒 VIP فقط"); return
         try:
             fake = _FakeUpdate(q.message, q.from_user)
@@ -3593,7 +3555,7 @@ async def post_init(app):
         asyncio.create_task(golden_loop(app)), asyncio.create_task(promo_loop(app)),
         asyncio.create_task(whale_hunter_loop(app)),
     ]
-    log.info("ryma v87 | max_open=%d | golden_cycle=%ds | min_score=%d | multi=%s | maint=%s",
+    log.info("ryma v88 | max_open=%d | golden_cycle=%ds | min_score=%d | multi=%s | maint=%s",
              MAX_OPEN, CYCLE_GOLDEN, get_golden_config().get("min_score",1), is_multi_exchange(), is_maintenance())
 
 async def post_shutdown(app):
