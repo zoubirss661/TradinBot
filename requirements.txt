@@ -1,12 +1,7 @@
-pyTelegramBotAPI>=4.14
+ python-telegram-bot>=21.2
 pandas
 numpy
 matplotlib
 requests
-Pillow
-arabic-reshaper
-python-bidi
 ccxt
-pandas_ta
-python-telegram-bot>=20.0
-python-dotenv
+Pillow
