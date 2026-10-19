@@ -1408,27 +1408,35 @@ def event_text(coin, tf, side, e, R, tier="free", trade=None):
     return None
 
 # ========================================================
-# إصلاح صفقة اليوم (رجوع كامل لمنطق v77)
+# إصلاح صفقة اليوم (ضمان 2 LONG و 2 SHORT)
 # ========================================================
 def _build_daily_lists(force_side=None):
-    # فلترة بسيطة جداً زي v77
-    binance_movers = _movers_from_binance_mirror(min_change=8.0, min_vol=5_000_000)
-    gainers = sorted([x for x in binance_movers if x["change"] > 0], key=lambda x: -x["change"])[:DAILY_TOP_N]
-    losers = sorted([x for x in binance_movers if x["change"] < 0], key=lambda x: x["change"])[:DAILY_TOP_N]
+    # 1. فلترة بسيطة جداً
+    binance_movers = _movers_from_binance_mirror(min_change=1.0, min_vol=1_000_000)
     
+    # 2. لو مفيش حركة، نجيب أعلى 50 عملة سيولة
+    if not binance_movers:
+        top_syms = top_symbols(50)
+        binance_movers = [dict(symbol=s, change=0, price=0, volume=10_000_000, src="binance_fut") for s in top_syms]
+        
+    gainers = sorted([x for x in binance_movers if x["change"] >= 0], key=lambda x: -x["change"])
+    losers = sorted([x for x in binance_movers if x["change"] < 0], key=lambda x: x["change"])
+
     def build_item(sym, expected_side, mv):
         try: df = get_candles(sym, "1h", 200, ttl=300, min_bars=50, binance_only=True)
         except Exception: return None
         if df.empty or len(df) < 50: return None
         
         df = add_indicators(df, 50); i = len(df) - 1; last = df.iloc[-1]
-        price = float(last["close"]); ema50 = float(last["ema50"]) if not pd.isna(last["ema50"]) else price
+        price = float(last["close"])
         rsi_v = float(last["rsi"]) if not pd.isna(last["rsi"]) else 50.0
+        trend = detect_trend(df, i)
         
+        # فلاتر مرنة جداً للترند
         if expected_side == 1:
-            if price <= ema50 or not (40 <= rsi_v <= 85): return None
+            if trend == "strong_down" or rsi_v < 30: return None
         else:
-            if price >= ema50 or not (15 <= rsi_v <= 60): return None
+            if trend == "strong_up" or rsi_v > 70: return None
             
         lv = compute_core_levels(df, i, expected_side, price)
         if lv is None: return None
@@ -1438,24 +1446,42 @@ def _build_daily_lists(force_side=None):
                              lv=lv, price=price, degraded=False, source=mv.get("src", "binance_fut"),
                              bar_t=int(last["t"]), rsi=rsi_v,
                              macd=float(last["macd"]) if not pd.isna(last["macd"]) else 0.0,
-                             candle=None, trend=detect_trend(df, i), trend_d="range",
+                             candle=None, trend=trend, trend_d="range",
                              sr_high=[], sr_low=[], fibs=[]),
                     change=mv.get("change", 0), volume=mv.get("volume", 0))
 
     longs, shorts = [], []; used = set()
+    
+    # المحاولة الأولى: من العملات المتحركة
     for g in gainers:
-        if len(longs) >= DAILY_LONGS * 3: break
+        if len(longs) >= 2: break
         if g["symbol"] in used: continue
         item = build_item(g["symbol"], 1, g)
         if item: longs.append(item); used.add(g["symbol"])
+        
     for l in losers:
-        if len(shorts) >= DAILY_SHORTS * 3: break
+        if len(shorts) >= 2: break
         if l["symbol"] in used: continue
         item = build_item(l["symbol"], -1, l)
         if item: shorts.append(item); used.add(l["symbol"])
-    longs.sort(key=lambda x: -(abs(x["change"]) * x["volume"]))
-    shorts.sort(key=lambda x: -(abs(x["change"]) * x["volume"]))
-    return longs[:DAILY_LONGS], shorts[:DAILY_SHORTS]
+        
+    # المحاولة التانية (الإجبارية): لو ناقص لونج، نلف على أعلى 50 عملة
+    if len(longs) < 2:
+        for s in top_symbols(50):
+            if len(longs) >= 2: break
+            if s in used: continue
+            item = build_item(s, 1, dict(symbol=s, change=0, volume=10_000_000, src="binance_fut"))
+            if item: longs.append(item); used.add(s)
+            
+    # المحاولة التالتة (الإجبارية): لو ناقص شورت، نلف على أعلى 50 عملة
+    if len(shorts) < 2:
+        for s in top_symbols(50):
+            if len(shorts) >= 2: break
+            if s in used: continue
+            item = build_item(s, -1, dict(symbol=s, change=0, volume=10_000_000, src="binance_fut"))
+            if item: shorts.append(item); used.add(s)
+
+    return longs[:2], shorts[:2]
 
 def _format_daily_card(res, side_label, change, volume):
     lv = res["lv"]; decision = "🟢 شراء" if res["side"] == 1 else "🔴 بيع"
@@ -1472,7 +1498,7 @@ def _format_daily_card(res, side_label, change, volume):
     return "\n".join(lines)
 
 # ========================================================
-# إصلاح الفرصة الذهبية (منع التناقض 100% + أهداف 5/10/15/25)
+# إصلاح الفرصة الذهبية (توحيد الاتجاه 100%)
 # ========================================================
 def golden_score(sym, debug=False, relaxed=False):
     cfg = dict(get_golden_config())
@@ -1492,7 +1518,7 @@ def golden_score(sym, debug=False, relaxed=False):
         trend_1d = detect_trend(df_1d, len(df_1d)-1)
         trend_4h = detect_trend(df_4h, len(df_4h)-1)
         
-        # 🔥 الحل السحري: توحيد الاتجاه مع التحليل العادي
+        # الحل السحري: توحيد الاتجاه مع التحليل العادي (بناءً على الفريم الأساسي)
         tf_main = default_tf(sym)
         df_main = df_1d if tf_main == "1d" else df_4h
         trend_main = trend_1d if tf_main == "1d" else trend_4h
@@ -1500,8 +1526,6 @@ def golden_score(sym, debug=False, relaxed=False):
         long_ok = detect_core_conditions(df_main, len(df_main)-1, 1)
         short_ok = detect_core_conditions(df_main, len(df_main)-1, -1)
         bias_d = daily_bias(df_1d)
-        
-        # إجبار الفرصة الذهبية على استخدام نفس الخوارزمية
         side = decide_side(df_main, len(df_main)-1, trend_main, bias_d, long_ok, short_ok)
         
         if side == 1:
@@ -1600,7 +1624,7 @@ def golden_score(sym, debug=False, relaxed=False):
         price = current
         sl_dist = max(price * 0.05, min(price * 0.08, atr * 2.5))
         
-        # أهداف منطقية للفرصة الذهبية: 5% - 10% - 15% - 25%
+        # أهداف منطقية للفرصة الذهبية (5/10/15/25)
         if side == 1:
             sl = price - sl_dist
             tps = [price * 1.05, price * 1.10, price * 1.15, price * 1.25]
@@ -3569,7 +3593,7 @@ async def post_init(app):
         asyncio.create_task(golden_loop(app)), asyncio.create_task(promo_loop(app)),
         asyncio.create_task(whale_hunter_loop(app)),
     ]
-    log.info("ryma v86 | max_open=%d | golden_cycle=%ds | min_score=%d | multi=%s | maint=%s",
+    log.info("ryma v87 | max_open=%d | golden_cycle=%ds | min_score=%d | multi=%s | maint=%s",
              MAX_OPEN, CYCLE_GOLDEN, get_golden_config().get("min_score",1), is_multi_exchange(), is_maintenance())
 
 async def post_shutdown(app):
