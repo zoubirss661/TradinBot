@@ -38,6 +38,9 @@ BRAND = "💎 Ryma Crypto 💎"
 RISK_WARNING = "⚠️ <i>التداول ينطوي على مخاطر عالية. يرجى إدارة رأس المال بذكاء. ليست نصيحة مالية.</i>"
 NO_PREVIEW = LinkPreviewOptions(is_disabled=True)
 
+# 🔥 قائمة سوداء لمنع الأسهم والرموز غير المرغوب فيها
+EXCLUDE_TICKERS = {"MU", "SPCX", "SNXX", "SOXS", "CL", "TSLA", "AAPL", "NVDA", "META", "GOOG", "AMZN", "MSFT", "NFLX", "AMD", "INTC", "BABA", "COIN", "MSTR", "GME", "AMC"}
+
 REFERRAL_LINKS = {
     "binance": ("Binance", "https://www.binance.com/register?ref=WELCOMBAKC"),
     "okx":     ("OKX",     "https://okx.com/join/QW22UB2Y"),
@@ -50,18 +53,18 @@ REFERRAL_LINKS = {
 }
 
 PLATFORM_META = {
-    "binance":  {"emoji": "🟡", "name": "Binance Square", "compose": "https://www.binance.com/en/square/post/create", "tags": "#BinanceSquare #Crypto #Futures", "ref": "binance"},
-    "bybit":    {"emoji": "🔵", "name": "Bybit", "compose": "https://www.bybit.com/en/copy-trading/", "tags": "#Bybit #CopyTrading #Crypto", "ref": "bybit"},
-    "okx":      {"emoji": "⚫", "name": "OKX", "compose": "https://www.okx.com/feed", "tags": "#OKX #Web3 #Crypto", "ref": "okx"},
-    "bitget":   {"emoji": "🟢", "name": "Bitget", "compose": "https://www.bitget.com/en/copy-trading", "tags": "#Bitget #CopyTrading #Crypto", "ref": "bitget"},
-    "kucoin":   {"emoji": "🟢", "name": "KuCoin", "compose": "https://www.kucoin.com/copy-trade", "tags": "#KuCoin #Altcoins #Crypto", "ref": "kucoin"},
-    "gateio":   {"emoji": "⚪", "name": "Gate.io", "compose": "https://www.gate.io/copy-trading", "tags": "#Gateio #Web3 #Crypto", "ref": "gateio"},
-    "twitter":  {"emoji": "🐦", "name": "Twitter (X)", "compose": None, "tags": "#Crypto #Trading #Futures", "ref": "binance"},
-    "telegram": {"emoji": "📱", "name": "Telegram", "compose": None, "tags": "#Crypto #Trading", "ref": "binance"},
-    "facebook": {"emoji": "📘", "name": "Facebook", "compose": None, "tags": "#Crypto #Trading", "ref": "binance"},
-    "whatsapp": {"emoji": "💬", "name": "WhatsApp", "compose": None, "tags": "#Crypto", "ref": "binance"},
-    "reddit":   {"emoji": "🔴", "name": "Reddit", "compose": None, "tags": "#Crypto #Trading", "ref": "binance"},
-    "discord":  {"emoji": "🎮", "name": "Discord", "compose": None, "tags": "#Crypto #Trading", "ref": "binance"},
+    "binance":  {"emoji": "🟡", "name": "Binance Square", "tags": "#BinanceSquare #Crypto #Futures", "ref": "binance"},
+    "bybit":    {"emoji": "🔵", "name": "Bybit", "tags": "#Bybit #CopyTrading #Crypto", "ref": "bybit"},
+    "okx":      {"emoji": "⚫", "name": "OKX", "tags": "#OKX #Web3 #Crypto", "ref": "okx"},
+    "bitget":   {"emoji": "🟢", "name": "Bitget", "tags": "#Bitget #CopyTrading #Crypto", "ref": "bitget"},
+    "kucoin":   {"emoji": "🟢", "name": "KuCoin", "tags": "#KuCoin #Altcoins #Crypto", "ref": "kucoin"},
+    "gateio":   {"emoji": "⚪", "name": "Gate.io", "tags": "#Gateio #Web3 #Crypto", "ref": "gateio"},
+    "twitter":  {"emoji": "🐦", "name": "Twitter (X)", "tags": "#Crypto #Trading #Futures", "ref": "binance"},
+    "telegram": {"emoji": "📱", "name": "Telegram", "tags": "#Crypto #Trading", "ref": "binance"},
+    "facebook": {"emoji": "📘", "name": "Facebook", "tags": "#Crypto #Trading", "ref": "binance"},
+    "whatsapp": {"emoji": "💬", "name": "WhatsApp", "tags": "#Crypto", "ref": "binance"},
+    "reddit":   {"emoji": "🔴", "name": "Reddit", "tags": "#Crypto #Trading", "ref": "binance"},
+    "discord":  {"emoji": "🎮", "name": "Discord", "tags": "#Crypto #Trading", "ref": "binance"},
 }
 
 def referral_for(source):
@@ -100,7 +103,7 @@ MEME_COINS = ["TIA","FLOKI","SOL","DOT","INJ"]
 ALPHA_COINS = ["ETH","BNB","SOL","SUI","NEAR","INJ","TIA","FLOKI","APT","ARB"]
 COINS = CORE_COINS + MEME_COINS
 WEAK_COINS = set()
-DAILY_EXCLUDE = {"BTC","ETH","BNB","SOL","XRP","DOGE","ADA","TRX","LTC","DOT","LINK","AVAX","TON","SHIB","PEPE","USDC","FDUSD","TUSD","USDT","DAI","BUSD","USDP","USDD","USDE","PYUSD","EUR","AEUR"}
+DAILY_EXCLUDE = {"BTC","ETH","BNB","SOL","XRP","DOGE","ADA","TRX","LTC","DOT","LINK","AVAX","TON","SHIB","PEPE","USDC","FDUSD","TUSD","USDT","DAI","BUSD","USDP","USDD","USDE","PYUSD","EUR","AEUR"} | EXCLUDE_TICKERS
 STABLES = DAILY_EXCLUDE
 
 TRIAL_DAYS = 7
@@ -318,10 +321,8 @@ def is_vip(uid): return vip_until(uid) > now_s()
 def user_status(uid, rec):
     if ADMIN_ID and uid == ADMIN_ID: return "admin", 0
     if is_vip(uid): return "vip", 0
-    
     actual_days = (now_s() - int(rec.get("first_seen", now_s()))) // DAY + 1
     calculated_day = actual_days - 3 
-    
     if calculated_day <= TRIAL_DAYS: return "trial", actual_days
     if calculated_day < VIP_FORCE_DAY: return "warning", actual_days
     return "blocked", actual_days
@@ -381,7 +382,7 @@ def binance_futures_all_tickers():
                 sym_full = t.get("symbol", "")
                 if not sym_full.endswith("USDT"): continue
                 base_sym = sym_full[:-4]
-                if base_sym in DAILY_EXCLUDE: continue
+                if base_sym in DAILY_EXCLUDE or base_sym in EXCLUDE_TICKERS: continue
                 if re.search(r"(UP|DOWN|BULL|BEAR|3L|3S|USDC)$", base_sym): continue
                 ch = float(t.get("priceChangePercent", 0)); price = float(t.get("lastPrice", 0))
                 qv = float(t.get("quoteVolume", 0))
@@ -565,7 +566,7 @@ def _movers_from_ccxt(ex_name, min_change=DAILY_MIN_CHANGE, min_vol=DAILY_MIN_VO
         for s, t in tickers.items():
             if not s.endswith("/USDT") or ":" in s: continue
             base = s.split("/")[0]
-            if not base or base in DAILY_EXCLUDE: continue
+            if not base or base in DAILY_EXCLUDE or base in EXCLUDE_TICKERS: continue
             if re.search(r"(UP|DOWN|BULL|BEAR|3L|3S|USDT|USDC)$", base): continue
             try:
                 ch = float(t.get("percentage") or 0); price = float(t.get("last") or 0)
@@ -731,16 +732,16 @@ def check_liquidity(sym, min_usd=MIN_DAILY_VOLUME_USD):
 
 def whale_radar(sym):
     try:
-        for ex_name in ["okx", "bybit", "gateio", "mexc", "kucoin"]:
+        for ex_name in ["binance", "okx", "bybit"]:
             try:
                 ex = get_ex(ex_name)
-                with _ex_lock[ex_name]: trades = ex.fetch_trades(f"{sym}/USDT", limit=500)
+                with _ex_lock[ex_name]: trades = ex.fetch_trades(f"{sym}/USDT", limit=200)
                 if not trades: continue
                 large, largest, buy_vol, sell_vol = 0, 0.0, 0.0, 0.0
                 for t in trades:
                     notional = float(t.get("price",0)) * float(t.get("amount",0))
                     largest = max(largest, notional)
-                    if notional >= 20000:
+                    if notional >= 5000: # 🔥 خففنا المبلغ
                         large += 1
                         if t.get("side") == "buy": buy_vol += notional
                         elif t.get("side") == "sell": sell_vol += notional
@@ -769,7 +770,10 @@ def explosion_radar(sym):
         if df.empty or len(df) < 20: return None
         last_vol = float(df["volume"].iloc[-1]); avg_vol = float(df["volume"].iloc[-20:-1].mean())
         if avg_vol <= 0: return None
-        return dict(vol_ratio=round(last_vol/avg_vol,2), price_change=round((float(df["close"].iloc[-1])/float(df["close"].iloc[-5])-1)*100, 2))
+        vol_ratio = round(last_vol/avg_vol, 2)
+        if vol_ratio >= 1.2: # 🔥 خففنا الشرط
+            return dict(vol_ratio=vol_ratio, price_change=round((float(df["close"].iloc[-1])/float(df["close"].iloc[-5])-1)*100, 2))
+        return None
     except Exception: return None
 
 def pump_radar(sym):
@@ -781,7 +785,7 @@ def pump_radar(sym):
         last_vol = float(df["volume"].iloc[-1]); avg_vol = float(df["volume"].iloc[-20:-1].mean())
         if avg_vol <= 0: return None
         vol_ratio = last_vol / avg_vol
-        if change_1h > 1.5 and vol_ratio > 1.3:
+        if change_1h > 0.5 and vol_ratio > 1.0: # 🔥 خففنا الشرط جداً
             return dict(change_1h=round(change_1h,2), change_4h=round(change_4h,2), vol_ratio=round(vol_ratio,2))
         return None
     except Exception: return None
@@ -818,8 +822,8 @@ def short_radar(sym):
         df = get_candles(sym, "4h", 200, ttl=300, min_bars=100)
         if df.empty or len(df) < 100: return None
         df = add_indicators(df, 100); last = df.iloc[-1]
-        if pd.isna(last["rsi"]) or pd.isna(last["ema50"]): return None
-        if last["rsi"] > 60 and last["close"] < last["ema50"]:
+        if pd.isna(last["rsi"]): return None
+        if last["rsi"] > 55: # 🔥 خففنا الشرط جداً
             return dict(rsi=round(float(last["rsi"]),1), price=round(float(last["close"]),6))
         return None
     except Exception: return None
@@ -843,7 +847,7 @@ def top_symbols(n=60, binance_only=False):
     try:
         rows = binance_futures_all_tickers()
         if rows:
-            rows = [(x["volume"], x["symbol"]) for x in rows if x["volume"] > 2e6]
+            rows = [(x["volume"], x["symbol"]) for x in rows if x["volume"] > 2e6 and x["symbol"] not in EXCLUDE_TICKERS]
             rows.sort(reverse=True)
             if rows:
                 _top_cache[0], _top_cache[1] = time.time(), [b for _,b in rows]
@@ -862,7 +866,7 @@ def top_symbols(n=60, binance_only=False):
                 for s,t in tk.items():
                     if not s.endswith("/USDT") or ":" in s: continue
                     base = s.split("/")[0]
-                    if base in DAILY_EXCLUDE: continue
+                    if base in DAILY_EXCLUDE or base in EXCLUDE_TICKERS: continue
                     if re.search(r"(UP|DOWN|BULL|BEAR|3L|3S)$", base): continue
                     qv = t.get("quoteVolume") or 0
                     if qv and qv > 2e6: rows.append((qv, base))
@@ -1382,13 +1386,11 @@ def event_text(coin, tf, side, e, R, tier="free", trade=None):
 # ========================================================
 def _build_daily_lists(force_side=None):
     binance_movers = _movers_from_binance_mirror(min_change=1.0, min_vol=1_000_000)
-    
-    # 🔥 فلتر الأمان: استبعاد العملات التي تحركت أكثر من 20% لتفادي الملاحقة
-    binance_movers = [x for x in binance_movers if abs(x["change"]) <= 20.0]
+    binance_movers = [x for x in binance_movers if abs(x["change"]) <= 20.0 and x["symbol"] not in EXCLUDE_TICKERS]
     
     if not binance_movers:
         top_syms = top_symbols(50)
-        binance_movers = [dict(symbol=s, change=0, price=0, volume=10_000_000, src="binance_fut") for s in top_syms]
+        binance_movers = [dict(symbol=s, change=0, price=0, volume=10_000_000, src="binance_fut") for s in top_syms if s not in EXCLUDE_TICKERS]
         
     gainers = sorted([x for x in binance_movers if x["change"] >= 0], key=lambda x: -x["change"])
     losers = sorted([x for x in binance_movers if x["change"] < 0], key=lambda x: x["change"])
@@ -1399,8 +1401,6 @@ def _build_daily_lists(force_side=None):
         if df.empty or len(df) < 50: return None
         
         df = add_indicators(df, 50); i = len(df) - 1; last = df.iloc[-1]
-        
-        # 🔥 استخدام السعر المباشر الحالي بدلاً من إغلاق الشمعة القديمة
         live_p, _ = live_price(sym)
         price = float(live_p) if live_p else float(last["close"])
         
@@ -1441,14 +1441,14 @@ def _build_daily_lists(force_side=None):
     if len(longs) < 2:
         for s in top_symbols(50):
             if len(longs) >= 2: break
-            if s in used: continue
+            if s in used or s in EXCLUDE_TICKERS: continue
             item = build_item(s, 1, dict(symbol=s, change=0, volume=10_000_000, src="binance_fut"))
             if item: longs.append(item); used.add(s)
             
     if len(shorts) < 2:
         for s in top_symbols(50):
             if len(shorts) >= 2: break
-            if s in used: continue
+            if s in used or s in EXCLUDE_TICKERS: continue
             item = build_item(s, -1, dict(symbol=s, change=0, volume=10_000_000, src="binance_fut"))
             if item: shorts.append(item); used.add(s)
 
@@ -1637,7 +1637,7 @@ def golden_scan(max_results=2, progress_cb=None):
         rows = binance_futures_all_tickers()
         if rows:
             rows_sorted = sorted(rows, key=lambda x: -x["volume"])
-            syms = [x["symbol"] for x in rows_sorted if x["volume"] > 2_000_000][:600]
+            syms = [x["symbol"] for x in rows_sorted if x["volume"] > 2_000_000 and x["symbol"] not in EXCLUDE_TICKERS][:600]
         else:
             syms = top_symbols(600, binance_only=True)
     except Exception:
@@ -1691,14 +1691,31 @@ def build_whale_tweet(sym, side, notional, price):
     return text, share_url
 
 # ========================================================
-# نصوص المنشورات + روابط العمولة
+# نصوص المنشورات + روابط العمولة (احترافية)
 # ========================================================
 def build_social_text(res, platform="binance"):
     side = res["side"]; lv = res["lv"]; sym = res["sym"]
     side_word = "LONG 🟢" if side == 1 else "SHORT 🔴"
     meta = PLATFORM_META.get(platform, PLATFORM_META["binance"])
     emoji = meta["emoji"]
-    trade_link = coin_link(sym, res.get("source", "binance_fut"))
+    
+    # 🔥 تحديد رابط التداول الصحيح لكل منصة
+    sym_u = sym.upper()
+    if platform == "binance":
+        trade_link = f"https://www.binance.com/futures/{sym_u}USDT?ref=WELCOMBAKC"
+    elif platform == "bybit":
+        trade_link = f"https://www.bybit.com/trade/usdt/{sym_u}USDT"
+    elif platform == "okx":
+        trade_link = f"https://www.okx.com/trade-swap/{sym.lower()}-usdt-swap"
+    elif platform == "bitget":
+        trade_link = f"https://www.bitget.com/futures/usdt/{sym_u}USDT"
+    elif platform == "kucoin":
+        trade_link = f"https://www.kucoin.com/futures/trade/{sym_u}USDTM"
+    elif platform == "gateio":
+        trade_link = f"https://www.gate.com/futures/USDT/{sym_u}_USDT"
+    else:
+        trade_link = coin_link(sym, res.get("source", "binance_fut"))
+
     coins = hot_coins_for(sym)
     coin_tags = " ".join(f"#{c}" for c in coins[:3])
     platform_tags = meta["tags"]
@@ -1758,16 +1775,17 @@ def build_share_urls(text, referral_url=None):
 
 def keyboard_share_post(res):
     sym = res["sym"]
-    clean_text = build_clean_trade_text(res)
-
-    platform_urls = {
-        "binance": "https://www.binance.com/en/square/post/create",
-        "bybit":   "https://www.bybit.com/en/copy-trading/",
-        "okx":     "https://www.okx.com/feed",
-        "bitget":  "https://www.bitget.com/en/copy-trading",
-        "kucoin":  "https://www.kucoin.com/copy-trade",
-        "gateio":  "https://www.gate.io/copy-trading",
+    
+    # روابط تطبيقات مباشرة
+    app_links = {
+        "binance": "binance://",
+        "bybit": "bybitapp://",
+        "okx": "okx://",
+        "bitget": "bitget://",
+        "kucoin": "kucoin://",
+        "gateio": "gateio://"
     }
+    
     trade_meta = [
         ("binance", "🟡", "Binance"),
         ("bybit",   "🔵", "Bybit"),
@@ -1779,8 +1797,8 @@ def keyboard_share_post(res):
     trade_rows = []
     for key, emoji, name in trade_meta:
         trade_rows.append([
-            InlineKeyboardButton(f"{emoji} {name} — افتح", url=platform_urls[key]),
-            InlineKeyboardButton(f"📋 نسخ لـ {name}", callback_data=f"cpP:{key}:{sym}"),
+            InlineKeyboardButton(f"{emoji} {name} — افتح", url=app_links.get(key, "https://www.google.com")),
+            InlineKeyboardButton(f"📋 نسخ لـ {name}", copy_text=CopyTextButton(text=build_social_text(res, key))),
         ])
 
     texts = {p: build_social_text(res, p) for p in PLATFORM_META}
@@ -1797,12 +1815,11 @@ def keyboard_share_post(res):
         [InlineKeyboardButton("📘 Facebook — جاهز", url=fb_url),
          InlineKeyboardButton("💬 WhatsApp — جاهز", url=wa_url)],
         [InlineKeyboardButton("🔴 Reddit — جاهز", url=rd_url),
-         InlineKeyboardButton("🎮 Discord (نسخ)", callback_data=f"cpP:discord:{sym}")],
+         InlineKeyboardButton("🎮 Discord (نسخ)", copy_text=CopyTextButton(text=texts["discord"]))],
     ]
 
     return InlineKeyboardMarkup(
         social_rows + trade_rows + [
-            [InlineKeyboardButton("📋 نسخ الصفقة النظيفة (أي مكان)", copy_text=CopyTextButton(text=clean_text))],
             [InlineKeyboardButton("❌ إغلاق", callback_data="close_menu")],
         ]
     )
@@ -2181,7 +2198,7 @@ async def run_autopost(bot):
     log.info("run_autopost: بدء المسح")
     syms = await asyncio.to_thread(top_symbols, 60)
     results = await asyncio.to_thread(scan_sync, syms[:40])
-    cands = [r for r in results if r["rank"] >= 0 and r["sym"] not in WEAK_COINS]
+    cands = [r for r in results if r["rank"] >= 0 and r["sym"] not in WEAK_COINS and r["sym"] not in EXCLUDE_TICKERS]
     cands.sort(key=lambda r: (-r["rank"], -r.get("ok",0)))
     today = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%d")
     if _free_day["d"] != today: _free_day.update(d=today, n=0)
@@ -2295,7 +2312,7 @@ async def cross_loop(app):
     while True:
         try:
             syms = await asyncio.to_thread(top_symbols, 60)
-            syms = [s for s in syms if s not in CROSS_EXCLUDE and s not in WEAK_COINS]
+            syms = [s for s in syms if s not in CROSS_EXCLUDE and s not in WEAK_COINS and s not in EXCLUDE_TICKERS]
             for sym in syms[:50]:
                 try:
                     df = await asyncio.to_thread(get_candles, sym, "4h", 450, 600, 200)
@@ -2659,6 +2676,8 @@ async def handle_symbol(update, raw, to_channel=False):
     if not ok: return
     sym = clean_symbol(raw)
     if not sym: await update.message.reply_text("📝 إدخال رمز عملة صحيح"); return
+    if sym in EXCLUDE_TICKERS:
+        await update.message.reply_text("⛔ هذا الرمز غير مدعوم (أسهم أو غير متاح)."); return
     wait = await update.message.reply_text(f"⏳ جارٍ تحليل {sym}...")
     try:
         res = await asyncio.to_thread(get_analysis, sym)
@@ -2782,7 +2801,7 @@ async def cmd_cross(update, ctx):
     wait = await update.message.reply_text("🌟 جارٍ فحص التقاطعات...")
     try:
         syms = await asyncio.to_thread(top_symbols, 60)
-        syms = [s for s in syms if s not in CROSS_EXCLUDE and s not in WEAK_COINS]
+        syms = [s for s in syms if s not in CROSS_EXCLUDE and s not in WEAK_COINS and s not in EXCLUDE_TICKERS]
         found = []
         for sym in syms[:50]:
             try:
@@ -2836,12 +2855,20 @@ async def cmd_predict(update, ctx):
 async def cmd_whales(update, ctx):
     wait = await update.message.reply_text("🐋 فحص الحيتان...")
     syms = await asyncio.to_thread(top_symbols, 30); rows = []
-    for s in syms[:20]:
+    for s in syms[:15]:
         w, largest, bv, sv = await asyncio.to_thread(whale_radar, s)
         if w and w >= 1: rows.append((s, w, largest, bv, sv))
-    if not rows: await wait.edit_text("🐋 لا توجد حركة"); return
+        
+    if not rows:
+        fallback_syms = await asyncio.to_thread(top_symbols, 5)
+        lines = ["🐋 <b>السوق هادئ جداً الآن (لا توجد تحركات حيتان)</b>", "👇 إليك أنشط العملات حالياً للمراقبة:", ""]
+        for s in fallback_syms:
+            lines.append(f"• #{s} — 🎯 القرار المتوقع: مراقبة")
+        await wait.edit_text("\n".join(lines), parse_mode=ParseMode.HTML, link_preview_options=NO_PREVIEW)
+        return
+
     rows.sort(key=lambda x: -x[2])
-    lines = ["🐋 <b>رادار الحيتان (فوق 20 ألف دولار)</b>", "━━━━━━━━━━━━━━━━", ""]
+    lines = ["🐋 <b>رادار الحيتان (فوق 5 آلاف دولار)</b>", "━━━━━━━━━━━━━━━━", ""]
     for s, w, largest, bv, sv in rows[:10]:
         total = bv + sv; buy_pct = (bv / total * 100) if total > 0 else 0
         direction = "🟢 شراء" if buy_pct > 55 else ("🔴 بيع" if buy_pct < 45 else "⚖️ متذبذب")
@@ -2959,8 +2986,16 @@ async def cmd_explosions(update, ctx):
     syms = await asyncio.to_thread(top_symbols, 40); rows = []
     for s in syms[:30]:
         r = await asyncio.to_thread(explosion_radar, s)
-        if r and r["vol_ratio"] >= 1.8: rows.append((s, r))
-    if not rows: await wait.edit_text("💥 لا توجد انفجارات"); return
+        if r: rows.append((s, r))
+        
+    if not rows:
+        fallback_syms = await asyncio.to_thread(top_symbols, 5)
+        lines = ["💥 <b>لا توجد انفجارات حالياً (السوق هادئ)</b>", "👇 إليك أنشط العملات للمراقبة:", ""]
+        for s in fallback_syms:
+            lines.append(f"• #{s} — 🎯 القرار المتوقع: مراقبة")
+        await wait.edit_text("\n".join(lines), parse_mode=ParseMode.HTML, link_preview_options=NO_PREVIEW)
+        return
+
     rows.sort(key=lambda x: -x[1]["vol_ratio"])
     lines = ["💥 رادار الانفجارات:", ""]
     for s, r in rows[:10]:
@@ -2976,7 +3011,15 @@ async def cmd_pump(update, ctx):
     for s in syms[:30]:
         r = await asyncio.to_thread(pump_radar, s)
         if r: rows.append((s, r))
-    if not rows: await wait.edit_text("🚀 لا توجد عملات"); return
+        
+    if not rows:
+        fallback_syms = await asyncio.to_thread(top_symbols, 5)
+        lines = ["🚀 <b>لا توجد عملات صاعدة حالياً (السوق هادئ)</b>", "👇 إليك أنشط العملات للمراقبة:", ""]
+        for s in fallback_syms:
+            lines.append(f"• #{s} — 🎯 القرار المتوقع: مراقبة")
+        await wait.edit_text("\n".join(lines), parse_mode=ParseMode.HTML, link_preview_options=NO_PREVIEW)
+        return
+
     rows.sort(key=lambda x: -x[1]["change_1h"])
     lines = ["🚀 عملات في صعود:", ""]
     for s, r in rows[:10]:
@@ -2991,7 +3034,7 @@ async def cmd_bottoms(update, ctx):
     for s in syms[:55]:
         r = await asyncio.to_thread(bottom_radar, s)
         if r: rows.append((s, r))
-    if not rows: await wait.edit_text("📉 لا توجد قيعان"); return
+    if not rows: await wait.edit_text("📉 لا توجد قيعان حالياً (السوق في حالة استقرار)."); return
     rows.sort(key=lambda x: x[1]["diff"])
     lines = ["📉 رادار القيعان:", ""]
     for s, r in rows[:10]:
@@ -3007,7 +3050,15 @@ async def cmd_shorts_radar(update, ctx):
     for s in syms[:30]:
         r = await asyncio.to_thread(short_radar, s)
         if r: rows.append((s, r))
-    if not rows: await wait.edit_text("🔻 لا توجد فرص"); return
+        
+    if not rows:
+        fallback_syms = await asyncio.to_thread(top_symbols, 5)
+        lines = ["🔻 <b>لا توجد فرص شورت حالياً (السوق يميل للصعود)</b>", "👇 إليك أنشط العملات للمراقبة:", ""]
+        for s in fallback_syms:
+            lines.append(f"• #{s} — 🎯 القرار المتوقع: مراقبة")
+        await wait.edit_text("\n".join(lines), parse_mode=ParseMode.HTML, link_preview_options=NO_PREVIEW)
+        return
+
     lines = ["🔻 رادار الشورت:", ""]
     for s, r in rows[:10]:
         lines += [f"🔻 #{s}: RSI {r['rsi']} | {fmt(r['price'])}", f"   🎯 القرار المتوقع: 🔴 بيع"]
@@ -3020,7 +3071,7 @@ async def cmd_alpha(update, ctx):
     for s in syms[:35]:
         r = await asyncio.to_thread(alpha_radar, s)
         if r: rows.append((s, r))
-    if not rows: await wait.edit_text("⭐ لا توجد"); return
+    if not rows: await wait.edit_text("⭐ لا توجد عملات Alpha قوية حالياً."); return
     rows.sort(key=lambda x: -x[1]["change_7d"])
     lines = ["⭐ رادار Alpha:", ""]
     for s, r in rows[:10]:
@@ -3125,7 +3176,7 @@ async def cmd_bt50(update, ctx):
 @admin_only
 async def cmd_scan(update, ctx):
     wait = await update.message.reply_text("⏳ فحص...")
-    syms = await asyncio.to_thread(top_symbols, 60)
+    syms = await asyncio.to_thread(top_symbols, 60, True)
     res = await asyncio.to_thread(scan_sync, syms[:30])
     res = [r for r in res if r["rank"] >= 0]; res.sort(key=lambda r: -r["rank"])
     if not res: await wait.edit_text("لا شيء"); return
@@ -3367,24 +3418,6 @@ async def cb_handler(update, ctx):
         except Exception: pass
         return
 
-    if q.data.startswith("cpP:"):
-        parts = q.data.split(":")
-        if len(parts) == 3:
-            platform, sym = parts[1], parts[2]
-            try:
-                res = await asyncio.to_thread(get_analysis, sym)
-                txt = build_social_text(res, platform) if platform in PLATFORM_META else build_clean_trade_text(res)
-                display_name = PLATFORM_META.get(platform, {}).get("name", platform.upper())
-                await q.message.reply_text(
-                    f"📋 <b>نص {display_name} — انسخه والصقه في المنصة:</b>\n\n<code>{txt}</code>",
-                    parse_mode=ParseMode.HTML,
-                    link_preview_options=NO_PREVIEW
-                )
-            except Exception as e:
-                try: await q.message.reply_text(f"⚠️ {str(e)[:150]}")
-                except Exception: pass
-        return
-
     if q.data.startswith("refs:"):
         try:
             msg = (
@@ -3566,7 +3599,7 @@ async def post_init(app):
         asyncio.create_task(golden_loop(app)), asyncio.create_task(promo_loop(app)),
         asyncio.create_task(whale_hunter_loop(app)),
     ]
-    log.info("ryma v90 | max_open=%d | golden_cycle=%ds | min_score=%d | multi=%s | maint=%s",
+    log.info("ryma v93 | max_open=%d | golden_cycle=%ds | min_score=%d | multi=%s | maint=%s",
              MAX_OPEN, CYCLE_GOLDEN, get_golden_config().get("min_score",1), is_multi_exchange(), is_maintenance())
 
 async def post_shutdown(app):
