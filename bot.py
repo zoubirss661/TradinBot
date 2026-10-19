@@ -53,18 +53,18 @@ REFERRAL_LINKS = {
 }
 
 PLATFORM_META = {
-    "binance":  {"emoji": "🟡", "name": "Binance Square", "tags": "#BinanceSquare #Crypto #Futures", "ref": "binance"},
-    "bybit":    {"emoji": "🔵", "name": "Bybit", "tags": "#Bybit #CopyTrading #Crypto", "ref": "bybit"},
-    "okx":      {"emoji": "⚫", "name": "OKX", "tags": "#OKX #Web3 #Crypto", "ref": "okx"},
-    "bitget":   {"emoji": "🟢", "name": "Bitget", "tags": "#Bitget #CopyTrading #Crypto", "ref": "bitget"},
-    "kucoin":   {"emoji": "🟢", "name": "KuCoin", "tags": "#KuCoin #Altcoins #Crypto", "ref": "kucoin"},
-    "gateio":   {"emoji": "⚪", "name": "Gate.io", "tags": "#Gateio #Web3 #Crypto", "ref": "gateio"},
-    "twitter":  {"emoji": "🐦", "name": "Twitter (X)", "tags": "#Crypto #Trading #Futures", "ref": "binance"},
-    "telegram": {"emoji": "📱", "name": "Telegram", "tags": "#Crypto #Trading", "ref": "binance"},
-    "facebook": {"emoji": "📘", "name": "Facebook", "tags": "#Crypto #Trading", "ref": "binance"},
+    "binance":  {"emoji": "🟡", "name": "Binance Square", "tags": "#Binance", "ref": "binance"},
+    "bybit":    {"emoji": "🔵", "name": "Bybit", "tags": "#Bybit", "ref": "bybit"},
+    "okx":      {"emoji": "⚫", "name": "OKX", "tags": "#OKX", "ref": "okx"},
+    "bitget":   {"emoji": "🟢", "name": "Bitget", "tags": "#Bitget", "ref": "bitget"},
+    "kucoin":   {"emoji": "🟢", "name": "KuCoin", "tags": "#KuCoin", "ref": "kucoin"},
+    "gateio":   {"emoji": "⚪", "name": "Gate.io", "tags": "#Gate", "ref": "gateio"},
+    "twitter":  {"emoji": "🐦", "name": "Twitter (X)", "tags": "#Crypto", "ref": "binance"},
+    "telegram": {"emoji": "📱", "name": "Telegram", "tags": "#Crypto", "ref": "binance"},
+    "facebook": {"emoji": "📘", "name": "Facebook", "tags": "#Crypto", "ref": "binance"},
     "whatsapp": {"emoji": "💬", "name": "WhatsApp", "tags": "#Crypto", "ref": "binance"},
-    "reddit":   {"emoji": "🔴", "name": "Reddit", "tags": "#Crypto #Trading", "ref": "binance"},
-    "discord":  {"emoji": "🎮", "name": "Discord", "tags": "#Crypto #Trading", "ref": "binance"},
+    "reddit":   {"emoji": "🔴", "name": "Reddit", "tags": "#Crypto", "ref": "binance"},
+    "discord":  {"emoji": "🎮", "name": "Discord", "tags": "#Crypto", "ref": "binance"},
 }
 
 def referral_for(source):
@@ -1717,7 +1717,9 @@ def build_social_text(res, platform="binance"):
         trade_link = coin_link(sym, res.get("source", "binance_fut"))
 
     coins = hot_coins_for(sym)
-    coin_tags = " ".join(f"#{c}" for c in coins[:3])
+    # 🔥 هاشتاجين بس (العملة + عملة تانية قوية)
+    other_coin = next((c for c in coins if c != sym), "BTC")
+    coin_tags = f"#{sym} #{other_coin}"
     platform_tags = meta["tags"]
 
     if platform == "twitter":
@@ -1727,7 +1729,7 @@ def build_social_text(res, platform="binance"):
             f"🎯 {fmt(lv['tps'][0]['px'])} | {fmt(lv['tps'][1]['px'])} | {fmt(lv['tps'][2]['px'])}\n"
             f"🛑 {fmt(lv['sl'])}\n\n"
             f"👉 Trade here: {trade_link}\n\n"
-            f"{coin_tags[:60]}\n"
+            f"{coin_tags}\n"
             f"⚠️ High risk / NFA"
         )
     else:
@@ -1746,37 +1748,10 @@ def build_social_text(res, platform="binance"):
         )
     return text
 
-def build_clean_trade_text(res):
-    side = res["side"]; lv = res["lv"]; sym = res["sym"]
-    side_word = "LONG 🟢" if side == 1 else "SHORT 🔴"
-    cl = coin_link(sym, res.get("source", "binance_fut"))
-    lines = [f"#{sym}/USDT  {side_word}", f"💵 Entry: {fmt(lv['entry'])}"]
-    for i, tp in enumerate(lv["tps"][:4], 1):
-        lines.append(f"🎯 TP{i}: {fmt(tp['px'])}")
-    lines.append(f"🛑 SL: {fmt(lv['sl'])}")
-    lines.append("")
-    lines.append(f"👉 للتداول اضغط هنا: {cl}")
-    lines.append("")
-    lines.append("⚠️ High risk / Not financial advice")
-    return "\n".join(lines)
-
-def build_share_urls(text, referral_url=None):
-    enc = urllib.parse.quote(text)
-    ref = referral_url or REFERRAL_LINKS["binance"][1]
-    enc_ref = urllib.parse.quote(ref)
-    return {
-        "twitter": f"https://twitter.com/intent/tweet?text={enc}",
-        "telegram": f"https://t.me/share/url?url={enc_ref}&text={enc}",
-        "whatsapp": f"https://wa.me/?text={enc}",
-        "facebook": f"https://www.facebook.com/sharer/sharer.php?u={enc_ref}&quote={enc}",
-        "linkedin": f"https://www.linkedin.com/sharing/share-offsite/?url={enc_ref}",
-        "reddit": f"https://www.reddit.com/submit?title={urllib.parse.quote('New Trade Signal')}&text={enc}",
-    }
-
 def keyboard_share_post(res):
     sym = res["sym"]
     
-    # روابط تطبيقات مباشرة
+    # روابط تطبيقات مباشرة (Deep Links)
     app_links = {
         "binance": "binance://",
         "bybit": "bybitapp://",
@@ -1794,11 +1769,18 @@ def keyboard_share_post(res):
         ("kucoin",  "🟢", "KuCoin"),
         ("gateio",  "⚪", "Gate"),
     ]
+    
     trade_rows = []
     for key, emoji, name in trade_meta:
+        # 🔥 نص مختصر جداً مخصوص لزر النسخ (أقل من 256 حرف عشان تيليجرام ميرفضوش)
+        short_text = (
+            f"#{sym} {'LONG🟢' if res['side']==1 else 'SHORT🔴'} | 💵 {fmt(res['lv']['entry'])} | "
+            f"🎯 {fmt(res['lv']['tps'][0]['px'])} | {fmt(res['lv']['tps'][1]['px'])} | {fmt(res['lv']['tps'][2]['px'])} | "
+            f"🛑 {fmt(res['lv']['sl'])} | 👉 {coin_link(sym, key)}"
+        )
         trade_rows.append([
             InlineKeyboardButton(f"{emoji} {name} — افتح", url=app_links.get(key, "https://www.google.com")),
-            InlineKeyboardButton(f"📋 نسخ لـ {name}", copy_text=CopyTextButton(text=build_social_text(res, key))),
+            InlineKeyboardButton(f"📋 نسخ لـ {name}", copy_text=CopyTextButton(text=short_text)),
         ])
 
     texts = {p: build_social_text(res, p) for p in PLATFORM_META}
@@ -1815,7 +1797,7 @@ def keyboard_share_post(res):
         [InlineKeyboardButton("📘 Facebook — جاهز", url=fb_url),
          InlineKeyboardButton("💬 WhatsApp — جاهز", url=wa_url)],
         [InlineKeyboardButton("🔴 Reddit — جاهز", url=rd_url),
-         InlineKeyboardButton("🎮 Discord (نسخ)", copy_text=CopyTextButton(text=texts["discord"]))],
+         InlineKeyboardButton("🎮 Discord (نسخ)", copy_text=CopyTextButton(text=texts["discord"][:250]))],
     ]
 
     return InlineKeyboardMarkup(
@@ -3599,7 +3581,7 @@ async def post_init(app):
         asyncio.create_task(golden_loop(app)), asyncio.create_task(promo_loop(app)),
         asyncio.create_task(whale_hunter_loop(app)),
     ]
-    log.info("ryma v93 | max_open=%d | golden_cycle=%ds | min_score=%d | multi=%s | maint=%s",
+    log.info("ryma v94 | max_open=%d | golden_cycle=%ds | min_score=%d | multi=%s | maint=%s",
              MAX_OPEN, CYCLE_GOLDEN, get_golden_config().get("min_score",1), is_multi_exchange(), is_maintenance())
 
 async def post_shutdown(app):
