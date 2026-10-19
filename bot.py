@@ -8,7 +8,7 @@ import concurrent.futures
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from telegram import (Update, InlineKeyboardButton, InlineKeyboardMarkup,
-                      BotCommand, LinkPreviewOptions)
+                      BotCommand, LinkPreviewOptions, CopyTextButton)
 from telegram.constants import ParseMode
 from telegram.ext import (ApplicationBuilder, CommandHandler, MessageHandler,
                           ContextTypes, filters, CallbackQueryHandler)
@@ -47,6 +47,45 @@ REFERRAL_LINKS = {
     "kucoin":  ("KuCoin",  "https://www.kucoin.com/r/rf/CXEJQGFK"),
     "bitget":  ("Bitget",  "https://www.bitget.com/ar/referral/register?clacCode=UX7TVDCT"),
     "bingx":   ("BingX",   "https://bingxdao.com/invite/6Y2TXMV4/"),
+}
+
+PLATFORM_META = {
+    "binance":  {"emoji": "🟡", "name": "Binance Square",
+                 "compose": "https://www.binance.com/en/square/post/create",
+                 "tags": "#BinanceSquare #Crypto #Futures",
+                 "ref": "binance"},
+    "bybit":    {"emoji": "🔵", "name": "Bybit",
+                 "compose": "https://www.bybit.com/en/copy-trading/",
+                 "tags": "#Bybit #CopyTrading #Crypto",
+                 "ref": "bybit"},
+    "okx":      {"emoji": "⚫", "name": "OKX",
+                 "compose": "https://www.okx.com/feed",
+                 "tags": "#OKX #Web3 #Crypto",
+                 "ref": "okx"},
+    "bitget":   {"emoji": "🟢", "name": "Bitget",
+                 "compose": "https://www.bitget.com/en/copy-trading",
+                 "tags": "#Bitget #CopyTrading #Crypto",
+                 "ref": "bitget"},
+    "kucoin":   {"emoji": "🟢", "name": "KuCoin",
+                 "compose": "https://www.kucoin.com/copy-trade",
+                 "tags": "#KuCoin #Altcoins #Crypto",
+                 "ref": "kucoin"},
+    "gateio":   {"emoji": "⚪", "name": "Gate.io",
+                 "compose": "https://www.gate.io/copy-trading",
+                 "tags": "#Gateio #Web3 #Crypto",
+                 "ref": "gateio"},
+    "twitter":  {"emoji": "🐦", "name": "Twitter (X)",
+                 "compose": None, "tags": "#Crypto #Trading #Futures", "ref": "binance"},
+    "telegram": {"emoji": "📱", "name": "Telegram",
+                 "compose": None, "tags": "#Crypto #Trading", "ref": "binance"},
+    "facebook": {"emoji": "📘", "name": "Facebook",
+                 "compose": None, "tags": "#Crypto #Trading", "ref": "binance"},
+    "whatsapp": {"emoji": "💬", "name": "WhatsApp",
+                 "compose": None, "tags": "#Crypto", "ref": "binance"},
+    "reddit":   {"emoji": "🔴", "name": "Reddit",
+                 "compose": None, "tags": "#Crypto #Trading", "ref": "binance"},
+    "discord":  {"emoji": "🎮", "name": "Discord",
+                 "compose": None, "tags": "#Crypto #Trading", "ref": "binance"},
 }
 
 def referral_for(source):
@@ -189,9 +228,14 @@ DAY = 86400
 def now_s(): return int(time.time())
 
 DEFAULT_GOLDEN_CONFIG = {
-    "require_1d_trend": True, "require_mtf": False, "require_rsi": True,
-    "require_volume": True, "require_breakout": False, "require_liquidity": True,
-    "require_alpha": False, "min_score": 2,
+    "require_1d_trend": False,
+    "require_mtf": False,
+    "require_rsi": True,
+    "require_volume": False,
+    "require_breakout": False,
+    "require_liquidity": False,
+    "require_alpha": False,
+    "min_score": 1,
 }
 
 KEYS = ["users","vip","signals","history","posted","settings"]
@@ -435,7 +479,6 @@ def _fetch_exchange(name, sym, tf, bars):
 
 _candle_cache = {}
 def get_candles(sym, tf, bars=450, ttl=CANDLE_TTL, min_bars=MIN_BARS, binance_only=False):
-    """Fetch OHLCV candles. If binance_only=True, only Binance Futures + Binance Spot Mirrors are tried."""
     key = (sym, tf, bars, min_bars, binance_only)
     hit = _candle_cache.get(key)
     if hit and time.time()-hit[0] < ttl: return hit[1]
@@ -859,6 +902,25 @@ def top_symbols(n=60, binance_only=False):
                     return _top_cache[1][:n]
             except Exception: continue
     return COINS[:n]
+
+_HOT = [0, ["BTC", "ETH"]]
+def hot_coins_for(sym):
+    if time.time() - _HOT[0] > 3600:
+        try:
+            rows = binance_futures_all_tickers()
+            if rows:
+                pop = sorted([r for r in rows if r["symbol"] in ("BTC","ETH","SOL","BNB","XRP","DOGE","ADA")],
+                             key=lambda x: -x["volume"])
+                _HOT[0] = time.time()
+                _HOT[1] = [r["symbol"] for r in pop[:2]] or ["BTC", "ETH"]
+        except Exception: pass
+    others = [c for c in _HOT[1] if c != sym]
+    coins = ([sym] + others)[:3]
+    while len(coins) < 3:
+        for c in ("BTC", "ETH", "SOL"):
+            if c not in coins:
+                coins.append(c); break
+    return coins
 
 def wilder(s,n): return s.ewm(alpha=1/n, adjust=False, min_periods=n).mean()
 def ema(s,n): return s.ewm(span=n, adjust=False, min_periods=n).mean()
@@ -1399,8 +1461,12 @@ def _format_daily_card(res, side_label, change, volume):
               f"📊 {'🔺' if change >= 0 else '🔻'} {change:+.1f}% | 💰 ${volume/1_000_000:.1f}M"]
     return "\n".join(lines)
 
-def golden_score(sym, debug=False):
-    cfg = get_golden_config()
+def golden_score(sym, debug=False, relaxed=False):
+    cfg = dict(get_golden_config())
+    if relaxed:
+        for k in list(cfg.keys()):
+            if k.startswith("require_"): cfg[k] = False
+        cfg["min_score"] = 0
     try:
         df_4h = get_candles(sym, "4h", 300, ttl=600, min_bars=100, binance_only=True)
         df_1d = get_candles(sym, "1d", 200, ttl=900, min_bars=100, binance_only=True)
@@ -1408,62 +1474,66 @@ def golden_score(sym, debug=False):
         df_4h = add_indicators(df_4h, 100); df_1d = add_indicators(df_1d, 100)
         r4 = df_4h.iloc[-1]; r1 = df_1d.iloc[-1]
         if pd.isna(r4["rsi"]) or pd.isna(r4["atr"]): return None
-        
+
         score = 0; reasons = []
         trend_1d = detect_trend(df_1d, len(df_1d)-1)
         trend_4h = detect_trend(df_4h, len(df_4h)-1)
         side = 0
-        
+
         if trend_1d in ("strong_up", "up"): side = 1; score += 3; reasons.append("1D UP")
         elif trend_1d in ("strong_down", "down"): side = -1; score += 3; reasons.append("1D DOWN")
         else:
-            if cfg.get("require_1d_trend", True): 
+            if cfg.get("require_1d_trend", True):
                 if debug: return dict(sym=sym, score=score, reasons=["رفض: اتجاه 1D عرضي"])
                 return None
             side = 1 if float(r4["rsi"]) < 50 else -1
-            
+            reasons.append("1D RANGE")
+
         same_up = trend_1d in ("strong_up","up") and trend_4h in ("strong_up","up")
         same_dn = trend_1d in ("strong_down","down") and trend_4h in ("strong_down","down")
         if cfg.get("require_mtf", False):
-            if not (same_up or same_dn): 
+            if not (same_up or same_dn):
                 if debug: return dict(sym=sym, score=score, reasons=["رفض: توافق MTF"])
                 return None
             score += 2; reasons.append("MTF")
         elif (same_up or same_dn):
             score += 2; reasons.append("MTF")
-            
+
         rsi_4h = float(r4["rsi"])
-        rsi_ok = (side == 1 and 35 <= rsi_4h <= 75) or (side == -1 and 25 <= rsi_4h <= 65)
+        rsi_ok = (side == 1 and 25 <= rsi_4h <= 80) or (side == -1 and 20 <= rsi_4h <= 75)
         if cfg.get("require_rsi", True):
-            if not rsi_ok: 
+            if not rsi_ok:
                 if debug: return dict(sym=sym, score=score, reasons=["رفض: RSI غير صحي"])
                 return None
             score += 2; reasons.append(f"RSI {rsi_4h:.0f}")
         elif rsi_ok:
             score += 2; reasons.append(f"RSI {rsi_4h:.0f}")
-            
+
         rvol = float(r4["rvol"]) if not pd.isna(r4["rvol"]) else 0
         if cfg.get("require_volume", True):
-            if rvol < 0.7: 
+            if rvol < 0.4:
                 if debug: return dict(sym=sym, score=score, reasons=["رفض: حجم ضعيف"])
                 return None
             score += 2; reasons.append(f"VOL x{rvol:.2f}")
-        elif rvol >= 1.0: score += 1; reasons.append(f"VOL x{rvol:.2f}")
-        
-        change_7d = (float(df_1d["close"].iloc[-1]) / float(df_1d["close"].iloc[-7]) - 1) * 100
+        elif rvol >= 0.8:
+            score += 1; reasons.append(f"VOL x{rvol:.2f}")
+
+        try:
+            change_7d = (float(df_1d["close"].iloc[-1]) / float(df_1d["close"].iloc[-7]) - 1) * 100
+        except Exception: change_7d = 0
         if side == 1 and 2 <= change_7d <= 100: score += 2; reasons.append(f"7D +{change_7d:.1f}%")
         elif side == -1 and -100 <= change_7d <= -2: score += 2; reasons.append(f"7D {change_7d:.1f}%")
-        
+
         recent_high = float(df_4h["high"].tail(100).max()); recent_low = float(df_4h["low"].tail(100).min())
         current = float(r4["close"])
         breakout_ok = (side == 1 and current >= recent_high * 0.92) or (side == -1 and current <= recent_low * 1.08)
         if cfg.get("require_breakout", False):
-            if not breakout_ok: 
+            if not breakout_ok:
                 if debug: return dict(sym=sym, score=score, reasons=["رفض: لا يوجد اختراق"])
                 return None
             score += 3; reasons.append("BRK")
         elif breakout_ok: score += 2; reasons.append("BRK")
-        
+
         try:
             oi = futures_oi_history(sym, "4h", 20); fr = futures_funding_rate(sym)
             if oi and oi.get("change_pct", 0) > 2: score += 2; reasons.append(f"OI +{oi['change_pct']:.1f}%")
@@ -1471,31 +1541,31 @@ def golden_score(sym, debug=False):
                 if side == 1 and fr < -0.01: score += 1; reasons.append(f"FR {fr:+.3f}%")
                 elif side == -1 and fr > 0.03: score += 1; reasons.append(f"FR {fr:+.3f}%")
         except Exception: pass
-        
+
         try:
             df_1h = get_candles(sym, "1h", 24, ttl=600, min_bars=20, binance_only=True)
             vol_24h = float((df_1h["volume"] * df_1h["close"]).sum())
-            liq_ok = vol_24h >= 2_000_000
+            liq_ok = vol_24h >= 1_000_000
             if cfg.get("require_liquidity", True):
-                if not liq_ok: 
+                if not liq_ok:
                     if debug: return dict(sym=sym, score=score, reasons=["رفض: سيولة ضعيفة"])
                     return None
                 score += 2; reasons.append(f"LIQ ${vol_24h/1e6:.0f}M")
             elif liq_ok: score += 2; reasons.append(f"LIQ ${vol_24h/1e6:.0f}M")
         except Exception: pass
-        
+
         if cfg.get("require_alpha", False):
-            if sym not in ALPHA_COINS: 
+            if sym not in ALPHA_COINS:
                 if debug: return dict(sym=sym, score=score, reasons=["رفض: ليست Alpha"])
                 return None
             score += 2; reasons.append("ALPHA")
         elif sym in ALPHA_COINS: score += 1; reasons.append("ALPHA")
-        
-        min_s = cfg.get("min_score", 2)
+
+        min_s = cfg.get("min_score", 1)
         if score < min_s:
             if debug: return dict(sym=sym, score=score, reasons=reasons)
             return None
-            
+
         atr = min(float(r4["atr"]), current * 0.1)
         price = current
         if side == 1: sl = price * 0.95; tps = [price * 1.10, price * 1.20, price * 1.30, price * 1.50]
@@ -1507,9 +1577,27 @@ def golden_score(sym, debug=False):
                     sl=sl, tps=tps, risk=risk, trend_1d=trend_1d, trend_4h=trend_4h,
                     change_7d=round(change_7d, 2), rsi=round(rsi_4h, 1), rvol=round(rvol, 2),
                     source=df_4h.attrs.get("source", "binance_fut"))
-    except Exception as e: 
+    except Exception as e:
         log.error(f"golden_score err {sym}: {e}")
         return None
+
+def _run_golden_scan(syms, max_results, progress_cb, relaxed=False):
+    results = []; total = len(syms)
+    def scan_one(sym):
+        try: return golden_score(sym, debug=False, relaxed=relaxed)
+        except Exception: return None
+    processed = 0
+    with concurrent.futures.ThreadPoolExecutor(max_workers=15) as executor:
+        futures = {executor.submit(scan_one, s): s for s in syms}
+        for future in concurrent.futures.as_completed(futures):
+            processed += 1
+            res = future.result()
+            if res: results.append(res)
+            if progress_cb and processed % 50 == 0:
+                try: progress_cb(processed, total, len(results))
+                except Exception: pass
+    results.sort(key=lambda x: -x["score"])
+    return results[:max_results]
 
 def golden_scan(max_results=2, progress_cb=None):
     try:
@@ -1522,25 +1610,11 @@ def golden_scan(max_results=2, progress_cb=None):
     except Exception:
         syms = top_symbols(600, binance_only=True)
     if not syms: return []
-    results = []
-    total = len(syms)
-    
-    def scan_one(sym):
-        try: return golden_score(sym, debug=False)
-        except Exception: return None
-
-    processed = 0
-    with concurrent.futures.ThreadPoolExecutor(max_workers=15) as executor:
-        futures = {executor.submit(scan_one, s): s for s in syms}
-        for future in concurrent.futures.as_completed(futures):
-            processed += 1
-            res = future.result()
-            if res: results.append(res)
-            if progress_cb and processed % 50 == 0:
-                progress_cb(processed, total, len(results))
-                
-    results.sort(key=lambda x: -x["score"])
-    return results[:max_results]
+    results = _run_golden_scan(syms, max_results, progress_cb, relaxed=False)
+    if not results:
+        log.info("golden_scan: no strict results, trying relaxed mode on top 200")
+        results = _run_golden_scan(syms[:200], max_results, progress_cb, relaxed=True)
+    return results
 
 def format_golden_post(g, tier="vip"):
     side_word = "🟢 شراء (LONG)" if g["side"] == 1 else "🔴 بيع (SHORT)"
@@ -1583,51 +1657,59 @@ def build_whale_tweet(sym, side, notional, price):
     share_url = f"https://twitter.com/intent/tweet?text={urllib.parse.quote(text)}"
     return text, share_url
 
-def build_social_text(res, platform="binance"):
-    side_word = "LONG 🟢" if res["side"] == 1 else "SHORT 🔴"
-    sym = res["sym"]
-    lv = res["lv"]
-    entry = fmt(lv["entry"])
-    sl = fmt(lv["sl"])
-    tp1 = fmt(lv["tps"][0]["px"]) if len(lv["tps"]) > 0 else "—"
-    tp2 = fmt(lv["tps"][1]["px"]) if len(lv["tps"]) > 1 else "—"
-    tp3 = fmt(lv["tps"][2]["px"]) if len(lv["tps"]) > 2 else "—"
-    tp4 = fmt(lv["tps"][3]["px"]) if len(lv["tps"]) > 3 else "—"
-    
-    header = f"🚀 إشارة قوية: #{sym}/USDT\n\n"
-    body = (
-        f"📊 الاتجاه: {side_word}\n"
-        f"💵 الدخول: {entry}\n"
-        f"🎯 الهدف 1: {tp1}\n"
-        f"🎯 الهدف 2: {tp2}\n"
-        f"🎯 الهدف 3: {tp3}\n"
-        f"🎯 الهدف 4: {tp4}\n"
-        f"🛑 وقف الخسارة: {sl}\n\n"
-    )
-    
-    if platform == "binance":
-        tags = f"#{sym} #Binance #Crypto #Trading #Futures #BinanceSquare"
-        cta = "👇 تابعنا للمزيد من الإشارات الحصرية! 👍 لايك | 🔁 شير | 👤 متابعة\n🔗 تفاصيل أكثر في البايو (Bio)"
-    elif platform == "bybit":
-        tags = f"#{sym} #Bybit #Crypto #Futures #Trading"
-        cta = "👇 زورونا للمزيد! 👍 لايك | 🔁 شير | 👤 متابعة\n🔗 تفاصيل أكثر في البايو (Bio)"
-    elif platform == "okx":
-        tags = f"#{sym} #OKX #Crypto #Web3 #Trading"
-        cta = "👇 زورونا للمزيد! 👍 لايك | 🔁 شير | 👤 متابعة\n🔗 تفاصيل أكثر في البايو (Bio)"
-    elif platform == "bitget":
-        tags = f"#{sym} #Bitget #Crypto #CopyTrading #Futures"
-        cta = "👇 زورونا للمزيد! 👍 لايك | 🔁 شير | 👤 متابعة\n🔗 تفاصيل أكثر في البايو (Bio)"
-    elif platform == "kucoin":
-        tags = f"#{sym} #KuCoin #Crypto #Altcoins #Trading"
-        cta = "👇 زورونا للمزيد! 👍 لايك | 🔁 شير | 👤 متابعة\n🔗 تفاصيل أكثر في البايو (Bio)"
-    elif platform == "discord":
-        tags = f"#{sym} #Discord #Crypto #Trading #Futures"
-        cta = "💬 انسخ النص وشاركه في سيرفر ديسكورد!\n👍 لايك | 🔁 شير | 👤 متابعة\n🔗 تفاصيل أكثر في البايو (Bio)"
-    else: # gateio
-        tags = f"#{sym} #Gateio #Crypto #Web3 #Trading"
-        cta = "👇 زورونا للمزيد! 👍 لايك | 🔁 شير | 👤 متابعة\n🔗 تفاصيل أكثر في البايو (Bio)"
+# ==================== نصوص المنشور الاجتماعي ====================
 
-    return f"{header}{body}{cta}\n\n{tags}"
+def build_social_text(res, platform="binance"):
+    """منشور نظيف: 4 TPs + رابط تداول (عمولة) + 3 عملات + like/share/follow + تحذير."""
+    side = res["side"]; lv = res["lv"]; sym = res["sym"]
+    side_word = "LONG 🟢" if side == 1 else "SHORT 🔴"
+    meta = PLATFORM_META.get(platform, PLATFORM_META["binance"])
+    emoji = meta["emoji"]
+    trade_link = coin_link(sym, res.get("source", "binance_fut"))
+    coins = hot_coins_for(sym)
+    coin_tags = " ".join(f"#{c}" for c in coins[:3])
+    platform_tags = meta["tags"]
+
+    if platform == "twitter":
+        text = (
+            f"{emoji} #{sym}/USDT {side_word}\n"
+            f"💵 {fmt(lv['entry'])}\n"
+            f"🎯 {fmt(lv['tps'][0]['px'])} | {fmt(lv['tps'][1]['px'])} | {fmt(lv['tps'][2]['px'])}\n"
+            f"🛑 {fmt(lv['sl'])}\n\n"
+            f"👉 Trade here: {trade_link}\n\n"
+            f"{coin_tags[:60]}\n"
+            f"⚠️ High risk / NFA"
+        )
+    else:
+        text = (
+            f"{emoji} #{sym}/USDT  {side_word}\n"
+            f"💵 Entry: {fmt(lv['entry'])}\n"
+            f"🎯 TP1: {fmt(lv['tps'][0]['px'])}\n"
+            f"🎯 TP2: {fmt(lv['tps'][1]['px'])}\n"
+            f"🎯 TP3: {fmt(lv['tps'][2]['px'])}\n"
+            f"🎯 TP4: {fmt(lv['tps'][3]['px'])}\n"
+            f"🛑 SL: {fmt(lv['sl'])}\n\n"
+            f"👉 Trade here: {trade_link}\n\n"
+            f"👍 Like | 🔁 Share | 👤 Follow\n\n"
+            f"{coin_tags} {platform_tags}\n\n"
+            f"⚠️ High risk / Not financial advice"
+        )
+    return text
+
+def build_clean_trade_text(res):
+    """نص نظيف جداً لزر نسخ الصفقة، مع رابط التداول."""
+    side = res["side"]; lv = res["lv"]; sym = res["sym"]
+    side_word = "LONG 🟢" if side == 1 else "SHORT 🔴"
+    cl = coin_link(sym, res.get("source", "binance_fut"))
+    lines = [f"#{sym}/USDT  {side_word}", f"💵 Entry: {fmt(lv['entry'])}"]
+    for i, tp in enumerate(lv["tps"][:4], 1):
+        lines.append(f"🎯 TP{i}: {fmt(tp['px'])}")
+    lines.append(f"🛑 SL: {fmt(lv['sl'])}")
+    lines.append("")
+    lines.append(f"👉 للتداول اضغط هنا: {cl}")
+    lines.append("")
+    lines.append("⚠️ High risk / Not financial advice")
+    return "\n".join(lines)
 
 def build_share_urls(text, referral_url=None):
     enc = urllib.parse.quote(text)
@@ -1643,22 +1725,56 @@ def build_share_urls(text, referral_url=None):
     }
 
 def keyboard_share_post(res):
-    tw = build_share_urls(build_social_text(res, "binance"), REFERRAL_LINKS["binance"][1])
-    return InlineKeyboardMarkup([
-        [InlineKeyboardButton("🟡 بينانس سكوير (Binance)", callback_data=f"cp:binance:{res['sym']}")],
-        [InlineKeyboardButton("🔵 باي بيت (Bybit)", callback_data=f"cp:bybit:{res['sym']}"),
-         InlineKeyboardButton("🔴 أو كي إكس (OKX)", callback_data=f"cp:okx:{res['sym']}")],
-        [InlineKeyboardButton("🟢 بيت جيت (Bitget)", callback_data=f"cp:bitget:{res['sym']}"),
-         InlineKeyboardButton("🟣 كو كوين (KuCoin)", callback_data=f"cp:kucoin:{res['sym']}")],
-        [InlineKeyboardButton("⚪ جيت (Gate)", callback_data=f"cp:gate:{res['sym']}")],
-        [InlineKeyboardButton("🐦 تويتر (X)", url=tw["twitter"]),
-         InlineKeyboardButton("📱 تيليجرام", url=tw["telegram"])],
-        [InlineKeyboardButton("📘 فيسبوك", url=tw["facebook"]),
-         InlineKeyboardButton("💬 واتساب", url=tw["whatsapp"])],
-        [InlineKeyboardButton("🔴 ريديت", url=tw["reddit"]),
-         InlineKeyboardButton("🎮 ديسكورد", callback_data=f"cp:discord:{res['sym']}")],
-        [InlineKeyboardButton("❌ إغلاق", callback_data="close_menu")],
-    ])
+    """أزرار النشر: زرّان لكل منصة تداول (افتح + نسخ)، والتطبيقات الاجتماعية جاهزة."""
+    sym = res["sym"]
+    clean_text = build_clean_trade_text(res)
+
+    platform_urls = {
+        "binance": "https://www.binance.com/en/square/post/create",
+        "bybit":   "https://www.bybit.com/en/copy-trading/",
+        "okx":     "https://www.okx.com/feed",
+        "bitget":  "https://www.bitget.com/en/copy-trading",
+        "kucoin":  "https://www.kucoin.com/copy-trade",
+        "gateio":  "https://www.gate.io/copy-trading",
+    }
+    trade_meta = [
+        ("binance", "🟡", "Binance"),
+        ("bybit",   "🔵", "Bybit"),
+        ("okx",     "⚫", "OKX"),
+        ("bitget",  "🟢", "Bitget"),
+        ("kucoin",  "🟢", "KuCoin"),
+        ("gateio",  "⚪", "Gate"),
+    ]
+    trade_rows = []
+    for key, emoji, name in trade_meta:
+        trade_rows.append([
+            InlineKeyboardButton(f"{emoji} {name} — افتح", url=platform_urls[key]),
+            InlineKeyboardButton(f"📋 نسخ لـ {name}", callback_data=f"cpP:{key}:{sym}"),
+        ])
+
+    texts = {p: build_social_text(res, p) for p in PLATFORM_META}
+    ref = REFERRAL_LINKS["binance"][1]
+    tw_url = f"https://twitter.com/intent/tweet?text={urllib.parse.quote(texts['twitter'])}"
+    tg_url = f"https://t.me/share/url?url={urllib.parse.quote(ref)}&text={urllib.parse.quote(texts['telegram'])}"
+    fb_url = f"https://www.facebook.com/sharer/sharer.php?u={urllib.parse.quote(ref)}&quote={urllib.parse.quote(texts['facebook'])}"
+    wa_url = f"https://wa.me/?text={urllib.parse.quote(texts['whatsapp'])}"
+    rd_url = f"https://www.reddit.com/submit?title={urllib.parse.quote(f'#{sym}/USDT Signal')}&text={urllib.parse.quote(texts['reddit'])}"
+
+    social_rows = [
+        [InlineKeyboardButton("🐦 Twitter (X) — جاهز", url=tw_url),
+         InlineKeyboardButton("📱 Telegram — جاهز", url=tg_url)],
+        [InlineKeyboardButton("📘 Facebook — جاهز", url=fb_url),
+         InlineKeyboardButton("💬 WhatsApp — جاهز", url=wa_url)],
+        [InlineKeyboardButton("🔴 Reddit — جاهز", url=rd_url),
+         InlineKeyboardButton("🎮 Discord (نسخ)", callback_data=f"cpP:discord:{sym}")],
+    ]
+
+    return InlineKeyboardMarkup(
+        social_rows + trade_rows + [
+            [InlineKeyboardButton("📋 نسخ الصفقة النظيفة (أي مكان)", copy_text=CopyTextButton(text=clean_text))],
+            [InlineKeyboardButton("❌ إغلاق", callback_data="close_menu")],
+        ]
+    )
 
 async def notify_both(bot, text, protect=True):
     for chat in (VIP_CHANNEL_ID, ADMIN_ID or None):
@@ -1673,7 +1789,7 @@ async def notify_both(bot, text, protect=True):
 async def notify_free(bot, text):
     if CHANNEL_ID:
         try:
-            await bot.send_message(CHANNEL_ID, text, parse_mode=ParseMode.HTML, 
+            await bot.send_message(CHANNEL_ID, text, parse_mode=ParseMode.HTML,
                                    protect_content=PROTECT, link_preview_options=NO_PREVIEW)
         except Exception as e:
             log.warning(f"notify_free: {str(e)[:80]}")
@@ -1825,14 +1941,14 @@ def keyboard_golden_config():
     cfg = get_golden_config()
     def ic(b): return "✅" if b else "⬜"
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton(f"{ic(cfg.get('require_1d_trend',True))} اتجاه 1D", callback_data="gc:require_1d_trend")],
+        [InlineKeyboardButton(f"{ic(cfg.get('require_1d_trend',False))} اتجاه 1D", callback_data="gc:require_1d_trend")],
         [InlineKeyboardButton(f"{ic(cfg.get('require_mtf',False))} توافق MTF", callback_data="gc:require_mtf")],
         [InlineKeyboardButton(f"{ic(cfg.get('require_rsi',True))} RSI صحي", callback_data="gc:require_rsi")],
-        [InlineKeyboardButton(f"{ic(cfg.get('require_volume',True))} حجم قوي", callback_data="gc:require_volume")],
+        [InlineKeyboardButton(f"{ic(cfg.get('require_volume',False))} حجم قوي", callback_data="gc:require_volume")],
         [InlineKeyboardButton(f"{ic(cfg.get('require_breakout',False))} اختراق/كسر", callback_data="gc:require_breakout")],
-        [InlineKeyboardButton(f"{ic(cfg.get('require_liquidity',True))} سيولة >2M$", callback_data="gc:require_liquidity")],
+        [InlineKeyboardButton(f"{ic(cfg.get('require_liquidity',False))} سيولة >1M$", callback_data="gc:require_liquidity")],
         [InlineKeyboardButton(f"{ic(cfg.get('require_alpha',False))} عملة Alpha فقط", callback_data="gc:require_alpha")],
-        [InlineKeyboardButton(f"📊 الحد الأدنى للنقاط: {cfg.get('min_score',2)}", callback_data="gc:min_score")],
+        [InlineKeyboardButton(f"📊 الحد الأدنى للنقاط: {cfg.get('min_score',1)}", callback_data="gc:min_score")],
         [InlineKeyboardButton("🔄 تحديث", callback_data="gc:refresh")],
         [InlineKeyboardButton("❌ إغلاق", callback_data="close_menu")],
     ])
@@ -1845,8 +1961,9 @@ def build_golden_config_text():
         "🔧 اضغط على أي شرط لتفعيله/تعطيله\n\n"
         "✅ = مطلوب اجتيازه\n"
         "⬜ = غير مطلوب\n\n"
-        f"📊 الحد الأدنى للنقاط: <b>{cfg.get('min_score',2)}</b>\n"
+        f"📊 الحد الأدنى للنقاط: <b>{cfg.get('min_score',1)}</b>\n"
         f"⏱ الدورة: كل 5 ساعات\n"
+        f"🔄 وضع Relaxed تلقائي عند عدم وجود نتائج\n"
         f"📌 ستظهر الفرصة عند تحقيق الشروط المفعّلة"
     )
 
@@ -2290,7 +2407,7 @@ async def golden_loop(app):
     await asyncio.sleep(600); _golden_posted = {}
     while True:
         try:
-            log.info("golden_loop: بدء البحث الشامل (500 عملة)")
+            log.info("golden_loop: بدء البحث الشامل")
             results = await asyncio.to_thread(golden_scan, 2, None)
             for g in results:
                 key = f"{g['sym']}:{g['side']}"
@@ -2307,7 +2424,7 @@ async def golden_loop(app):
 
 async def whale_hunter_loop(app):
     await asyncio.sleep(60)
-    log.info("whale_hunter_loop: بدء مراقبة الحيتان (Marketing Mode)")
+    log.info("whale_hunter_loop: بدء مراقبة الحيتان")
     _seen_whales = set()
     while True:
         try:
@@ -2323,22 +2440,19 @@ async def whale_hunter_loop(app):
                             trade_id = f"{s}_{tr.get('id')}"
                             if trade_id in _seen_whales: continue
                             _seen_whales.add(trade_id)
-                            if len(_seen_whales) > 1000: _seen_whales.clear() 
-                            
+                            if len(_seen_whales) > 1000: _seen_whales.clear()
                             side = tr.get("side", "buy")
                             price = float(tr.get("price", 0))
                             text, share_url = build_whale_tweet(s, side, notional, price)
-                            
                             kb = InlineKeyboardMarkup([
                                 [InlineKeyboardButton("🚀 انشر على تويتر (X)", url=share_url)],
                                 [InlineKeyboardButton("📋 رابط التسجيل فقط", url=REFERRAL_LINKS["binance"][1])]
                             ])
-                            
                             await app.bot.send_message(
-                                ADMIN_ID, 
-                                f"🚨 <b>صيد جديد (جاهز للنشر):</b>\n\n{text}", 
-                                parse_mode=ParseMode.HTML, 
-                                reply_markup=kb, 
+                                ADMIN_ID,
+                                f"🚨 <b>صيد جديد (جاهز للنشر):</b>\n\n{text}",
+                                parse_mode=ParseMode.HTML,
+                                reply_markup=kb,
                                 link_preview_options=NO_PREVIEW
                             )
                 except Exception:
@@ -2614,19 +2728,11 @@ async def cmd_daily(update, ctx):
         await wait.delete()
         for idx, item in enumerate(longs, 1):
             txt = _format_daily_card(item["res"], f"🟢 LONG {idx}", item.get("change", 0), item.get("volume", 0))
-            try:
-                img = await asyncio.to_thread(render_chart, item["res"], "vip", False)
-                await update.message.reply_photo(photo=img, caption=txt, parse_mode=ParseMode.HTML)
-            except Exception:
-                await update.message.reply_text(txt, parse_mode=ParseMode.HTML, link_preview_options=NO_PREVIEW)
+            await update.message.reply_text(txt, parse_mode=ParseMode.HTML, link_preview_options=NO_PREVIEW)
             await asyncio.sleep(0.7)
         for idx, item in enumerate(shorts, 1):
             txt = _format_daily_card(item["res"], f"🔴 SHORT {idx}", item.get("change", 0), item.get("volume", 0))
-            try:
-                img = await asyncio.to_thread(render_chart, item["res"], "vip", False)
-                await update.message.reply_photo(photo=img, caption=txt, parse_mode=ParseMode.HTML)
-            except Exception:
-                await update.message.reply_text(txt, parse_mode=ParseMode.HTML, link_preview_options=NO_PREVIEW)
+            await update.message.reply_text(txt, parse_mode=ParseMode.HTML, link_preview_options=NO_PREVIEW)
             await asyncio.sleep(0.7)
         await update.message.reply_text(f"📊 النتيجة: {len(longs)} LONG + {len(shorts)} SHORT\n\n"
                                         f"💡 الصفقات جاهزة للنشر يدوياً\n\n{RISK_WARNING}",
@@ -2767,7 +2873,6 @@ async def cmd_futures(update, ctx):
 @vip_only
 async def cmd_golden(update, ctx):
     wait = await update.message.reply_text("💎 جارٍ البحث...\n⏳ فحص 500 عملة")
-    # ✅ إصلاح Event Loop: نلتقط الـ loop الحالي مرة واحدة قبل الدخول للثريد
     try:
         running_loop = asyncio.get_running_loop()
     except RuntimeError:
@@ -2778,17 +2883,13 @@ async def cmd_golden(update, ctx):
                 f"💎 <b>جارٍ المسح الشامل...</b>\n\n"
                 f"📊 تم فحص: <b>{processed}</b> من <b>{total}</b> عملة\n"
                 f"🎯 تم إيجاد: <b>{found}</b> فرصة حتى الآن\n\n"
-                f"⏳ يرجى الانتظار، نحن نبحث عن أفضل الإعدادات لك...",
+                f"⏳ يرجى الانتظار...",
                 parse_mode=ParseMode.HTML
             )
         except Exception: pass
-
     def sync_progress(proc, tot, fnd):
-        try:
-            asyncio.run_coroutine_threadsafe(update_progress(proc, tot, fnd), running_loop)
-        except Exception:
-            pass
-
+        try: asyncio.run_coroutine_threadsafe(update_progress(proc, tot, fnd), running_loop)
+        except Exception: pass
     try:
         results = await asyncio.to_thread(golden_scan, 2, sync_progress)
         if not results:
@@ -2796,24 +2897,21 @@ async def cmd_golden(update, ctx):
             near_misses = []
             for s in syms[:8]:
                 try:
-                    r = await asyncio.to_thread(golden_score, s, True)
+                    r = await asyncio.to_thread(golden_score, s, True, False)
                     if r: near_misses.append(r)
                 except Exception: continue
             near_misses.sort(key=lambda x: -x["score"])
-            
             msg = "💎 <b>لا توجد فرصة ذهبية حالياً</b>\n\n"
             if near_misses:
                 msg += "🔍 <b>أقرب العملات للفرصة (Score):</b>\n"
                 for nm in near_misses[:3]:
                     msg += f"<b>#{nm['sym']}</b> — النقاط: {nm['score']}\n"
                     msg += f"  ↳ {', '.join(nm['reasons'][:4])}\n\n"
-            
             cfg = get_golden_config()
-            msg += f"📊 <b>الحد الأدنى المطلوب: {cfg.get('min_score', 2)}</b>\n"
-            msg += "💡 <b>ملاحظة:</b> إذا كانت أقرب العملات نقاطها قريبة من الحد الأدنى، جرب تقليل النقاط."
+            msg += f"📊 <b>الحد الأدنى المطلوب: {cfg.get('min_score',1)}</b>\n"
+            msg += "💡 <b>ملاحظة:</b> البوت جرب الوضع Relaxed تلقائياً ولم يجد فرصة كافية."
             await wait.edit_text(msg, parse_mode=ParseMode.HTML, link_preview_options=NO_PREVIEW)
             return
-            
         await wait.delete()
         for g in results:
             txt = format_golden_post(g, "vip")
@@ -2903,24 +3001,19 @@ async def cmd_alpha(update, ctx):
 async def cmd_share(update, ctx):
     if not ctx.args: await update.message.reply_text("مثال: /share BTC"); return
     sym = clean_symbol(ctx.args[0])
-    wait = await update.message.reply_text(f"⏳ جارٍ تجهيز منشور {sym}...")
+    wait = await update.message.reply_text(f"⏳ جارٍ تجهيز {sym}...")
     try:
         res = await asyncio.to_thread(get_analysis, sym, True)
         await wait.delete()
-        
         img = await asyncio.to_thread(render_chart, res, "vip")
         await update.message.reply_photo(
             photo=img,
-            caption=f"🖼️ احفظ هذا الشارت لترفقه مع منشورك على #{sym}",
-            parse_mode=ParseMode.HTML
+            caption=f"🖼️ شارت #{sym} — احفظه لإرفاقه مع منشورك"
         )
-        
         await update.message.reply_text(
-            "🚀 <b>اختر المنصة التي تريد النشر عليها:</b>\n\n"
-            "📌 <b>ملاحظة:</b> البوت سينسخ النص المخصص للمنصة (بـ 4 أهداف وهاشتاغات).\n"
-            "الصق النص في المنصة، وارفق الشارت الذي أرسلته أعلاه، وانشر!",
+            "👇 اختر المنصة:",
             reply_markup=keyboard_share_post(res),
-            parse_mode=ParseMode.HTML
+            link_preview_options=NO_PREVIEW
         )
     except Exception as e:
         log.exception("share")
@@ -2957,7 +3050,7 @@ async def cmd_debug(update, ctx):
              f"📊 MAX_OPEN: {MAX_OPEN} | نشطة: {len(active_signals())}",
              f"📝 posted: {len(store.data['posted'])}",
              f"📡 Binance Futures API: {BINANCE_FAPI_BASE}",
-             f"💎 Golden: كل {CYCLE_GOLDEN//3600}س | Min score: {get_golden_config().get('min_score',2)}"]
+             f"💎 Golden: كل {CYCLE_GOLDEN//3600}س | Min score: {get_golden_config().get('min_score',1)}"]
     syms = await asyncio.to_thread(top_symbols, 60)
     lines.append(f"🎯 top_symbols: {len(syms)}")
     if syms: lines.append(f"   {', '.join(syms[:10])}")
@@ -3120,7 +3213,7 @@ async def cmd_dashboard(update, ctx):
            f"📡 Binance Futures: ✅\n"
            f"📢 FREE {'✅' if CHANNEL_ID else '—'} | VIP {'✅' if VIP_CHANNEL_ID else '—'}\n\n"
            f"🔗 روابط إحالة: {len(REFERRAL_LINKS)}\n"
-           f"💎 الذهبية: كل {CYCLE_GOLDEN//3600}س | Min: {get_golden_config().get('min_score',2)}")
+           f"💎 الذهبية: كل {CYCLE_GOLDEN//3600}س | Min: {get_golden_config().get('min_score',1)}")
     await update.message.reply_text(msg)
 
 @admin_only
@@ -3186,9 +3279,9 @@ async def cb_handler(update, ctx):
             return
         if key == "min_score":
             cfg = get_golden_config()
-            current = cfg.get("min_score", 2)
-            cycle = {1:2, 2:3, 3:4, 4:5, 5:6, 6:7, 7:8, 8:9, 9:1}
-            set_golden_config("min_score", cycle.get(current, 2))
+            current = cfg.get("min_score", 1)
+            cycle = {0:1, 1:2, 2:3, 3:4, 4:5, 5:6, 6:7, 7:8, 8:9, 9:0}
+            set_golden_config("min_score", cycle.get(current, 1))
             try:
                 await q.message.edit_text(build_golden_config_text(),
                                           reply_markup=keyboard_golden_config(),
@@ -3196,7 +3289,7 @@ async def cb_handler(update, ctx):
             except Exception: pass
             return
         if key in DEFAULT_GOLDEN_CONFIG:
-            cfg = get_golden_config(); current = cfg.get(key, True)
+            cfg = get_golden_config(); current = cfg.get(key, False)
             set_golden_config(key, not current)
             try:
                 await q.message.edit_text(build_golden_config_text(),
@@ -3243,20 +3336,23 @@ async def cb_handler(update, ctx):
         except Exception: pass
         return
 
-    if q.data.startswith("cp:"):
+    # نسخ نص منصة معينة (cpP: = copy per platform)
+    if q.data.startswith("cpP:"):
         parts = q.data.split(":")
         if len(parts) == 3:
-            platform = parts[1]
-            sym = parts[2]
+            platform, sym = parts[1], parts[2]
             try:
                 res = await asyncio.to_thread(get_analysis, sym)
-                txt_ar = build_social_text(res, platform)
+                txt = build_social_text(res, platform) if platform in PLATFORM_META else build_clean_trade_text(res)
+                display_name = PLATFORM_META.get(platform, {}).get("name", platform.upper())
                 await q.message.reply_text(
-                    f"📋 <b>النص المخصص لـ {platform.upper()}:</b>\n\n<code>{txt_ar}</code>\n\n"
-                    f"👆 انسخ النص، ثم أرفق صورة الشارت التي أرسلتها وانشر!",
-                    parse_mode=ParseMode.HTML
+                    f"📋 <b>نص {display_name} — انسخه والصقه في المنصة:</b>\n\n<code>{txt}</code>",
+                    parse_mode=ParseMode.HTML,
+                    link_preview_options=NO_PREVIEW
                 )
-            except Exception: pass
+            except Exception as e:
+                try: await q.message.reply_text(f"⚠️ {str(e)[:150]}")
+                except Exception: pass
         return
 
     if q.data.startswith("refs:"):
@@ -3440,8 +3536,8 @@ async def post_init(app):
         asyncio.create_task(golden_loop(app)), asyncio.create_task(promo_loop(app)),
         asyncio.create_task(whale_hunter_loop(app)),
     ]
-    log.info("ryma v78 FULL | max_open=%d | golden_cycle=%ds | min_score=%d | multi_exchange=%s | maintenance=%s | social_buttons=12",
-             MAX_OPEN, CYCLE_GOLDEN, get_golden_config().get("min_score",2), is_multi_exchange(), is_maintenance())
+    log.info("ryma v80 | max_open=%d | golden_cycle=%ds | min_score=%d | multi=%s | maint=%s",
+             MAX_OPEN, CYCLE_GOLDEN, get_golden_config().get("min_score",1), is_multi_exchange(), is_maintenance())
 
 async def post_shutdown(app):
     for t in app.bot_data.get("tasks",[]): t.cancel()
