@@ -1411,45 +1411,27 @@ def _build_daily_lists(force_side=None):
     binance_movers = _movers_from_binance_mirror(min_change=8.0, min_vol=5_000_000)
     gainers = sorted([x for x in binance_movers if x["change"] > 0], key=lambda x: -x["change"])[:DAILY_TOP_N]
     losers = sorted([x for x in binance_movers if x["change"] < 0], key=lambda x: x["change"])[:DAILY_TOP_N]
-    
     def build_item(sym, expected_side, mv):
-        try: 
-            df_1h = get_candles(sym, "1h", 200, ttl=300, min_bars=50, binance_only=True)
-            df_1d = get_candles(sym, "1d", 250, ttl=600, min_bars=200, binance_only=True)
+        try: df = get_candles(sym, "1h", 200, ttl=300, min_bars=50, binance_only=True)
         except Exception: return None
-        if df_1h.empty or df_1d.empty or len(df_1h) < 50 or len(df_1d) < 200: return None
-        
-        df_1h = add_indicators(df_1h, 50)
-        df_1d = add_indicators(df_1d, 50)
-        
-        i_1h = len(df_1h) - 1
-        i_1d = len(df_1d) - 1
-        last_1h = df_1h.iloc[i_1h]
-        
-        trend_1d = detect_trend(df_1d, i_1d)
-        price = float(last_1h["close"])
-        ema50_1h = float(last_1h["ema50"]) if not pd.isna(last_1h["ema50"]) else price
-        rsi_1h = float(last_1h["rsi"]) if not pd.isna(last_1h["rsi"]) else 50.0
-        
+        if df.empty or len(df) < 50: return None
+        df = add_indicators(df, 50); i = len(df) - 1; last = df.iloc[-1]
+        price = float(last["close"]); ema50 = float(last["ema50"]) if not pd.isna(last["ema50"]) else price
+        rsi_v = float(last["rsi"]) if not pd.isna(last["rsi"]) else 50.0
         if expected_side == 1:
-            if trend_1d not in ("up", "strong_up"): return None
-            if price <= ema50_1h or not (40 <= rsi_1h <= 85): return None
+            if price <= ema50 or not (40 <= rsi_v <= 85): return None
         else:
-            if trend_1d not in ("down", "strong_down"): return None
-            if price >= ema50_1h or not (15 <= rsi_1h <= 60): return None
-            
-        lv = compute_core_levels(df_1h, i_1h, expected_side, price)
+            if price >= ema50 or not (15 <= rsi_v <= 60): return None
+        lv = compute_core_levels(df, i, expected_side, price)
         if lv is None: return None
-        
-        return dict(res=dict(sym=sym, tf="1h", df=df_1h, side=expected_side, strategy="Futures",
+        return dict(res=dict(sym=sym, tf="1h", df=df, side=expected_side, strategy="Futures",
                              rank=2, grade="A", setup="Futures", ok=1, total=4,
                              lv=lv, price=price, degraded=False, source=mv.get("src", "binance_fut"),
-                             bar_t=int(last_1h["t"]), rsi=rsi_1h,
-                             macd=float(last_1h["macd"]) if not pd.isna(last_1h["macd"]) else 0.0,
-                             candle=None, trend=trend_1d, trend_d=trend_1d,
+                             bar_t=int(last["t"]), rsi=rsi_v,
+                             macd=float(last["macd"]) if not pd.isna(last["macd"]) else 0.0,
+                             candle=None, trend=detect_trend(df, i), trend_d="range",
                              sr_high=[], sr_low=[], fibs=[]),
                     change=mv.get("change", 0), volume=mv.get("volume", 0))
-
     longs, shorts = [], []; used = set()
     for g in gainers:
         if len(longs) >= DAILY_LONGS * 3: break
@@ -1468,14 +1450,9 @@ def _build_daily_lists(force_side=None):
 def _format_daily_card(res, side_label, change, volume):
     lv = res["lv"]; decision = "🟢 شراء" if res["side"] == 1 else "🔴 بيع"
     cl = coin_link(res['sym'], res.get("source", "binance_fut"))
-    
-    trend_map = {"strong_up":"صاعد قوي 🚀", "up":"صاعد 📈", "strong_down":"هابط قوي 📉", "down":"هابط 🔻", "range":"عرضي ↔️", "unknown":"—"}
-    trend_txt = trend_map.get(res.get("trend"), "—")
-    
     lines = [side_label, "",
              f"📌 <a href='{cl}'>#{res['sym']}/USDT</a> 👆 اضغط هنا",
              f"📡 {display_source(res.get('source','binance_fut'))}",
-             f"📊 الترند اليومي: <b>{trend_txt}</b>",
              f"➡️ Entry: {fmt(lv['entry'])}"]
     for i, tp in enumerate(lv["tps"][:DAILY_TP_COUNT], 1):
         lines.append(f"🎯 Target {i}: {fmt(tp['px'])}")
@@ -1501,32 +1478,41 @@ def golden_score(sym, debug=False, relaxed=False):
         score = 0; reasons = []
         trend_1d = detect_trend(df_1d, len(df_1d)-1)
         trend_4h = detect_trend(df_4h, len(df_4h)-1)
-        side = 0
-
-        if trend_1d in ("strong_up", "up"): side = 1; score += 3; reasons.append("1D UP")
-        elif trend_1d in ("strong_down", "down"): side = -1; score += 3; reasons.append("1D DOWN")
+        
+        long_ok = detect_core_conditions(df_4h, len(df_4h)-1, 1)
+        short_ok = detect_core_conditions(df_4h, len(df_4h)-1, -1)
+        bias_d = daily_bias(df_1d)
+        side = decide_side(df_4h, len(df_4h)-1, trend_4h, bias_d, long_ok, short_ok)
+        
+        if side == 1:
+            if trend_1d in ("strong_up", "up"): score += 3; reasons.append("1D UP")
+            elif trend_1d == "range": reasons.append("1D RANGE")
+            else:
+                if cfg.get("require_1d_trend", True):
+                    if debug: return dict(sym=sym, score=score, reasons=["رفض: تعارض 1D"])
+                    return None
         else:
-            if cfg.get("require_1d_trend", True):
-                if debug: return dict(sym=sym, score=score, reasons=["رفض: اتجاه 1D عرضي"])
-                return None
-            side = 1 if float(r4["rsi"]) < 50 else -1
-            reasons.append("1D RANGE")
+            if trend_1d in ("strong_down", "down"): score += 3; reasons.append("1D DOWN")
+            elif trend_1d == "range": reasons.append("1D RANGE")
+            else:
+                if cfg.get("require_1d_trend", True):
+                    if debug: return dict(sym=sym, score=score, reasons=["رفض: تعارض 1D"])
+                    return None
 
-        same_up = trend_1d in ("strong_up","up") and trend_4h in ("strong_up","up")
-        same_dn = trend_1d in ("strong_down","down") and trend_4h in ("strong_down","down")
+        same_dir = (side == 1 and trend_4h in ("strong_up","up")) or (side == -1 and trend_4h in ("strong_down","down"))
         if cfg.get("require_mtf", False):
-            if not (same_up or same_dn):
-                if debug: return dict(sym=sym, score=score, reasons=["رفض: توافق MTF"])
+            if not same_dir:
+                if debug: return dict(sym=sym, score=score, reasons=["رفض: MTF"])
                 return None
             score += 2; reasons.append("MTF")
-        elif (same_up or same_dn):
+        elif same_dir:
             score += 2; reasons.append("MTF")
 
         rsi_4h = float(r4["rsi"])
         rsi_ok = (side == 1 and 25 <= rsi_4h <= 80) or (side == -1 and 20 <= rsi_4h <= 75)
         if cfg.get("require_rsi", True):
             if not rsi_ok:
-                if debug: return dict(sym=sym, score=score, reasons=["رفض: RSI غير صحي"])
+                if debug: return dict(sym=sym, score=score, reasons=["رفض: RSI"])
                 return None
             score += 2; reasons.append(f"RSI {rsi_4h:.0f}")
         elif rsi_ok:
@@ -1535,7 +1521,7 @@ def golden_score(sym, debug=False, relaxed=False):
         rvol = float(r4["rvol"]) if not pd.isna(r4["rvol"]) else 0
         if cfg.get("require_volume", True):
             if rvol < 0.4:
-                if debug: return dict(sym=sym, score=score, reasons=["رفض: حجم ضعيف"])
+                if debug: return dict(sym=sym, score=score, reasons=["رفض: حجم"])
                 return None
             score += 2; reasons.append(f"VOL x{rvol:.2f}")
         elif rvol >= 0.8:
@@ -1547,12 +1533,13 @@ def golden_score(sym, debug=False, relaxed=False):
         if side == 1 and 2 <= change_7d <= 100: score += 2; reasons.append(f"7D +{change_7d:.1f}%")
         elif side == -1 and -100 <= change_7d <= -2: score += 2; reasons.append(f"7D {change_7d:.1f}%")
 
-        recent_high = float(df_4h["high"].tail(100).max()); recent_low = float(df_4h["low"].tail(100).min())
+        recent_high = float(df_4h["high"].tail(100).max())
+        recent_low = float(df_4h["low"].tail(100).min())
         current = float(r4["close"])
         breakout_ok = (side == 1 and current >= recent_high * 0.92) or (side == -1 and current <= recent_low * 1.08)
         if cfg.get("require_breakout", False):
             if not breakout_ok:
-                if debug: return dict(sym=sym, score=score, reasons=["رفض: لا يوجد اختراق"])
+                if debug: return dict(sym=sym, score=score, reasons=["رفض: لا اختراق"])
                 return None
             score += 3; reasons.append("BRK")
         elif breakout_ok: score += 2; reasons.append("BRK")
@@ -1571,7 +1558,7 @@ def golden_score(sym, debug=False, relaxed=False):
             liq_ok = vol_24h >= 1_000_000
             if cfg.get("require_liquidity", True):
                 if not liq_ok:
-                    if debug: return dict(sym=sym, score=score, reasons=["رفض: سيولة ضعيفة"])
+                    if debug: return dict(sym=sym, score=score, reasons=["رفض: سيولة"])
                     return None
                 score += 2; reasons.append(f"LIQ ${vol_24h/1e6:.0f}M")
             elif liq_ok: score += 2; reasons.append(f"LIQ ${vol_24h/1e6:.0f}M")
@@ -1591,11 +1578,19 @@ def golden_score(sym, debug=False, relaxed=False):
 
         atr = min(float(r4["atr"]), current * 0.1)
         price = current
-        if side == 1: sl = price * 0.95; tps = [price * 1.10, price * 1.20, price * 1.30, price * 1.50]
-        else: sl = price * 1.05; tps = [price * 0.90, price * 0.80, price * 0.70, price * 0.50]
+        sl_dist = max(price * 0.05, min(price * 0.08, atr * 2.5))
+        
+        if side == 1:
+            sl = price - sl_dist
+            tps = [price * 1.10, price * 1.20, price * 1.35, price * 1.50]
+        else:
+            sl = price + sl_dist
+            tps = [price * 0.90, price * 0.80, price * 0.65, price * 0.50]
+        
         risk = abs(price - sl)
         if risk <= 0 or any(tp <= 0 for tp in tps): return None
         tps.sort(reverse=(side == -1))
+        
         return dict(sym=sym, side=side, score=score, reasons=reasons, price=price, atr=atr,
                     sl=sl, tps=tps, risk=risk, trend_1d=trend_1d, trend_4h=trend_4h,
                     change_7d=round(change_7d, 2), rsi=round(rsi_4h, 1), rvol=round(rvol, 2),
@@ -2742,7 +2737,7 @@ async def cmd_daily(update, ctx):
     try:
         longs, shorts = await asyncio.to_thread(_build_daily_lists)
         if not longs and not shorts:
-            await wait.edit_text("🎯 لا توجد صفقات مطابقة للترند اليومي."); return
+            await wait.edit_text("🎯 لا توجد صفقات مطابقة."); return
         await wait.delete()
         for idx, item in enumerate(longs, 1):
             txt = _format_daily_card(item["res"], f"🟢 LONG {idx}", item.get("change", 0), item.get("volume", 0))
@@ -3553,7 +3548,7 @@ async def post_init(app):
         asyncio.create_task(golden_loop(app)), asyncio.create_task(promo_loop(app)),
         asyncio.create_task(whale_hunter_loop(app)),
     ]
-    log.info("ryma v81 | max_open=%d | golden_cycle=%ds | min_score=%d | multi=%s | maint=%s",
+    log.info("ryma v83 | max_open=%d | golden_cycle=%ds | min_score=%d | multi=%s | maint=%s",
              MAX_OPEN, CYCLE_GOLDEN, get_golden_config().get("min_score",1), is_multi_exchange(), is_maintenance())
 
 async def post_shutdown(app):
