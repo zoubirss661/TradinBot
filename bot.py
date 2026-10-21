@@ -38,7 +38,6 @@ BRAND = "💎 Ryma Crypto 💎"
 RISK_WARNING = "⚠️ <i>التداول ينطوي على مخاطر عالية. يرجى إدارة رأس المال بذكاء. ليست نصيحة مالية.</i>"
 NO_PREVIEW = LinkPreviewOptions(is_disabled=True)
 
-# 🔥 قائمة سوداء لمنع الأسهم والرموز غير المرغوب فيها
 EXCLUDE_TICKERS = {"MU", "SPCX", "SNXX", "SOXS", "CL", "TSLA", "AAPL", "NVDA", "META", "GOOG", "AMZN", "MSFT", "NFLX", "AMD", "INTC", "BABA", "COIN", "MSTR", "GME", "AMC"}
 
 REFERRAL_LINKS = {
@@ -360,6 +359,7 @@ def binance_futures_klines(sym, tf, bars=500):
                 return [[int(k[0]), float(k[1]), float(k[2]), float(k[3]), float(k[4]), float(k[5])] for k in data]
     except Exception: pass
     return None
+
 def binance_futures_ticker(sym):
     try:
         r = requests.get(f"{BINANCE_FAPI_BASE}/fapi/v1/ticker/24hr", params={"symbol": f"{sym}USDT"}, timeout=10)
@@ -370,6 +370,7 @@ def binance_futures_ticker(sym):
                     "low": float(d.get("lowPrice", 0))}
     except Exception: pass
     return None
+
 def binance_futures_all_tickers():
     try:
         r = requests.get(f"{BINANCE_FAPI_BASE}/fapi/v1/ticker/24hr", timeout=15)
@@ -399,6 +400,7 @@ def _binance_mirror_request(path, params):
             if r.status_code == 200: return r.json(), base
         except Exception: continue
     return None, None
+
 def binance_mirror_klines(sym, tf, bars=500):
     interval = BINANCE_INTERVAL_MAP.get(tf)
     if not interval: return None
@@ -472,9 +474,7 @@ def get_candles(sym, tf, bars=450, ttl=CANDLE_TTL, min_bars=MIN_BARS, binance_on
                 _candle_cache[key] = (time.time(), df); return df
     except Exception: pass
 
-    if binance_only:
-        raise NoData(sym)
-
+    if binance_only: raise NoData(sym)
     multi = is_multi_exchange()
     if not multi: raise NoData(sym)
 
@@ -612,6 +612,7 @@ def _bybit_get(path, params):
         if r.status_code == 200: return r.json()
     except Exception: pass
     return None
+
 def futures_oi_history(sym, period="4h", limit=20):
     try:
         bp = {"15m":"15min","1h":"1h","4h":"4h","1d":"1d"}.get(period, "4h")
@@ -624,6 +625,7 @@ def futures_oi_history(sym, period="4h", limit=20):
                     return dict(current=curr, change_pct=round((curr/old-1)*100, 2), src="bybit")
     except Exception: pass
     return None
+
 def futures_funding_rate(sym):
     try:
         d = _bybit_get("/v5/market/tickers", {"category":"linear","symbol":f"{sym}USDT"})
@@ -632,6 +634,7 @@ def futures_funding_rate(sym):
             if lst: return float(lst[0].get("fundingRate", 0)) * 100
     except Exception: pass
     return None
+
 def futures_long_short_ratio(sym, period="4h", limit=10):
     try:
         bp = {"15m":"15min","1h":"1h","4h":"4h","1d":"1d"}.get(period, "4h")
@@ -853,8 +856,7 @@ def top_symbols(n=60, binance_only=False):
                 _top_cache[0], _top_cache[1] = time.time(), [b for _,b in rows]
                 return _top_cache[1][:n]
     except Exception: pass
-    if binance_only:
-        return COINS[:n]
+    if binance_only: return COINS[:n]
     if is_multi_exchange():
         for name in FAST_EXCHANGES:
             if name == "binance": continue
@@ -1381,62 +1383,52 @@ def event_text(coin, tf, side, e, R, tier="free", trade=None):
         return headers.get(k, "") + card
     return None
 
+# ==========================================
+# 🛠️ الإصلاح الجذري لصفقة اليوم (Daily Fix)
+# ==========================================
 def _build_daily_lists(force_side=None):
-    binance_movers = _movers_from_binance_mirror(min_change=1.0, min_vol=1_000_000)
-    binance_movers = [x for x in binance_movers if abs(x["change"]) <= 20.0 and x["symbol"] not in EXCLUDE_TICKERS]
-    if not binance_movers:
-        top_syms = top_symbols(50)
-        binance_movers = [dict(symbol=s, change=0, price=0, volume=10_000_000, src="binance_fut") for s in top_syms if s not in EXCLUDE_TICKERS]
-    gainers = sorted([x for x in binance_movers if x["change"] >= 0], key=lambda x: -x["change"])
-    losers = sorted([x for x in binance_movers if x["change"] < 0], key=lambda x: x["change"])
-
-    def build_item(sym, expected_side, mv):
-        try: df = get_candles(sym, "1h", 200, ttl=300, min_bars=50, binance_only=True)
-        except Exception: return None
-        if df.empty or len(df) < 50: return None
-        df = add_indicators(df, 50); i = len(df) - 1; last = df.iloc[-1]
-        live_p, _ = live_price(sym)
-        price = float(live_p) if live_p else float(last["close"])
-        rsi_v = float(last["rsi"]) if not pd.isna(last["rsi"]) else 50.0
-        trend = detect_trend(df, i)
-        if expected_side == 1:
-            if trend == "strong_down" or rsi_v < 30: return None
-        else:
-            if trend == "strong_up" or rsi_v > 70: return None
-        lv = compute_core_levels(df, i, expected_side, price)
-        if lv is None: return None
-        return dict(res=dict(sym=sym, tf="1h", df=df, side=expected_side, strategy="Futures",
-                             rank=2, grade="A", setup="Futures", ok=1, total=4,
-                             lv=lv, price=price, degraded=False, source=mv.get("src", "binance_fut"),
-                             bar_t=int(last["t"]), rsi=rsi_v,
-                             macd=float(last["macd"]) if not pd.isna(last["macd"]) else 0.0,
-                             candle=None, trend=trend, trend_d="range",
-                             sr_high=[], sr_low=[], fibs=[]),
-                    change=mv.get("change", 0), volume=mv.get("volume", 0))
-
-    longs, shorts = [], []; used = set()
-    for g in gainers:
-        if len(longs) >= 2: break
-        if g["symbol"] in used: continue
-        item = build_item(g["symbol"], 1, g)
-        if item: longs.append(item); used.add(g["symbol"])
-    for l in losers:
-        if len(shorts) >= 2: break
-        if l["symbol"] in used: continue
-        item = build_item(l["symbol"], -1, l)
-        if item: shorts.append(item); used.add(l["symbol"])
-    if len(longs) < 2:
-        for s in top_symbols(50):
-            if len(longs) >= 2: break
-            if s in used or s in EXCLUDE_TICKERS: continue
-            item = build_item(s, 1, dict(symbol=s, change=0, volume=10_000_000, src="binance_fut"))
-            if item: longs.append(item); used.add(s)
-    if len(shorts) < 2:
-        for s in top_symbols(50):
-            if len(shorts) >= 2: break
-            if s in used or s in EXCLUDE_TICKERS: continue
-            item = build_item(s, -1, dict(symbol=s, change=0, volume=10_000_000, src="binance_fut"))
-            if item: shorts.append(item); used.add(s)
+    # 1. جلب بيانات المتحركين للسياق فقط
+    gainers, losers = get_top_movers(force=True)
+    all_movers = gainers + losers
+    top_syms = [x["symbol"] for x in all_movers[:40]]
+    
+    if len(top_syms) < 20:
+        top_syms.extend(top_symbols(20))
+        
+    # 2. استدعاء العقل المركزي لتحليل هذه العملات
+    results = scan_sync(list(set(top_syms)))
+    
+    longs, shorts = [], []
+    
+    # 3. الفرز بصرامة بناءً على اتجاه العقل المركزي فقط
+    for r in results:
+        if r["grade"] not in ("A+", "A", "B"): continue
+        if r["sym"] in EXCLUDE_TICKERS: continue
+        
+        # البحث عن البيانات السياقية
+        mv = next((x for x in all_movers if x["symbol"] == r["sym"]), {"change": 0, "volume": 0})
+        item = dict(res=r, change=mv["change"], volume=mv["volume"])
+        
+        if r["side"] == 1 and len(longs) < 2:
+            longs.append(item)
+        elif r["side"] == -1 and len(shorts) < 2:
+            shorts.append(item)
+            
+    # 4. إذا لم نجد 2 شورت حقيقيات، نبحث في بقية السوق (بدون إجبار)
+    if len(longs) < 2 or len(shorts) < 2:
+        more_syms = top_symbols(60)
+        more_res = scan_sync(more_syms)
+        for r in more_res:
+            if r["grade"] not in ("A+", "A", "B"): continue
+            if r["sym"] in EXCLUDE_TICKERS: continue
+            if any(x["res"]["sym"] == r["sym"] for x in longs + shorts): continue
+            
+            item = dict(res=r, change=0, volume=0)
+            if r["side"] == 1 and len(longs) < 2:
+                longs.append(item)
+            elif r["side"] == -1 and len(shorts) < 2:
+                shorts.append(item)
+                
     return longs[:2], shorts[:2]
 
 def _format_daily_card(res, side_label, change, volume):
@@ -1453,145 +1445,39 @@ def _format_daily_card(res, side_label, change, volume):
               f"📊 {'🔺' if change >= 0 else '🔻'} {change:+.1f}% | 💰 ${volume/1_000_000:.1f}M"]
     return "\n".join(lines)
 
+# ==========================================
+# 🛠️ الإصلاح الجذري للفرصة الذهبية (Golden Fix)
+# ==========================================
 def golden_score(sym, debug=False, relaxed=False):
-    cfg = dict(get_golden_config())
-    if relaxed:
-        for k in list(cfg.keys()):
-            if k.startswith("require_"): cfg[k] = False
-        cfg["min_score"] = 0
     try:
-        df_4h = get_candles(sym, "4h", 300, ttl=600, min_bars=100, binance_only=True)
-        df_1d = get_candles(sym, "1d", 200, ttl=900, min_bars=100, binance_only=True)
-        if df_4h.empty or df_1d.empty: return None
-        df_4h = add_indicators(df_4h, 100); df_1d = add_indicators(df_1d, 100)
-        r4 = df_4h.iloc[-1]; r1 = df_1d.iloc[-1]
-        if pd.isna(r4["rsi"]) or pd.isna(r4["atr"]): return None
-
-        score = 0; reasons = []
-        trend_1d = detect_trend(df_1d, len(df_1d)-1)
-        trend_4h = detect_trend(df_4h, len(df_4h)-1)
+        # الاعتماد على العقل المركزي أولاً
+        res = get_analysis(sym)
+        if not res: return None
         
-        tf_main = default_tf(sym)
-        df_main = df_1d if tf_main == "1d" else df_4h
-        trend_main = trend_1d if tf_main == "1d" else trend_4h
-        
-        long_ok = detect_core_conditions(df_main, len(df_main)-1, 1)
-        short_ok = detect_core_conditions(df_main, len(df_main)-1, -1)
-        bias_d = daily_bias(df_1d)
-        
-        side = decide_side(df_main, len(df_main)-1, trend_main, bias_d, long_ok, short_ok)
-        
-        if side == 1:
-            if trend_1d in ("strong_up", "up"): score += 3; reasons.append("1D UP")
-            elif trend_1d == "range": reasons.append("1D RANGE")
-            else:
-                if cfg.get("require_1d_trend", True):
-                    if debug: return dict(sym=sym, score=score, reasons=["رفض: تعارض 1D"])
-                    return None
-        else:
-            if trend_1d in ("strong_down", "down"): score += 3; reasons.append("1D DOWN")
-            elif trend_1d == "range": reasons.append("1D RANGE")
-            else:
-                if cfg.get("require_1d_trend", True):
-                    if debug: return dict(sym=sym, score=score, reasons=["رفض: تعارض 1D"])
-                    return None
-
-        same_dir = (side == 1 and trend_4h in ("strong_up","up")) or (side == -1 and trend_4h in ("strong_down","down"))
-        if cfg.get("require_mtf", False):
-            if not same_dir:
-                if debug: return dict(sym=sym, score=score, reasons=["رفض: MTF"])
-                return None
-            score += 2; reasons.append("MTF")
-        elif same_dir:
-            score += 2; reasons.append("MTF")
-
-        rsi_4h = float(r4["rsi"])
-        rsi_ok = (side == 1 and 25 <= rsi_4h <= 80) or (side == -1 and 20 <= rsi_4h <= 75)
-        if cfg.get("require_rsi", True):
-            if not rsi_ok:
-                if debug: return dict(sym=sym, score=score, reasons=["رفض: RSI"])
-                return None
-            score += 2; reasons.append(f"RSI {rsi_4h:.0f}")
-        elif rsi_ok:
-            score += 2; reasons.append(f"RSI {rsi_4h:.0f}")
-
-        rvol = float(r4["rvol"]) if not pd.isna(r4["rvol"]) else 0
-        if cfg.get("require_volume", True):
-            if rvol < 0.4:
-                if debug: return dict(sym=sym, score=score, reasons=["رفض: حجم"])
-                return None
-            score += 2; reasons.append(f"VOL x{rvol:.2f}")
-        elif rvol >= 0.8:
-            score += 1; reasons.append(f"VOL x{rvol:.2f}")
-
-        try:
-            change_7d = (float(df_1d["close"].iloc[-1]) / float(df_1d["close"].iloc[-7]) - 1) * 100
-        except Exception: change_7d = 0
-        if side == 1 and 2 <= change_7d <= 100: score += 2; reasons.append(f"7D +{change_7d:.1f}%")
-        elif side == -1 and -100 <= change_7d <= -2: score += 2; reasons.append(f"7D {change_7d:.1f}%")
-
-        recent_high = float(df_4h["high"].tail(100).max())
-        recent_low = float(df_4h["low"].tail(100).min())
-        current = float(r4["close"])
-        breakout_ok = (side == 1 and current >= recent_high * 0.92) or (side == -1 and current <= recent_low * 1.08)
-        if cfg.get("require_breakout", False):
-            if not breakout_ok:
-                if debug: return dict(sym=sym, score=score, reasons=["رفض: لا اختراق"])
-                return None
-            score += 3; reasons.append("BRK")
-        elif breakout_ok: score += 2; reasons.append("BRK")
-
-        try:
-            oi = futures_oi_history(sym, "4h", 20); fr = futures_funding_rate(sym)
-            if oi and oi.get("change_pct", 0) > 2: score += 2; reasons.append(f"OI +{oi['change_pct']:.1f}%")
-            if fr is not None:
-                if side == 1 and fr < -0.01: score += 1; reasons.append(f"FR {fr:+.3f}%")
-                elif side == -1 and fr > 0.03: score += 1; reasons.append(f"FR {fr:+.3f}%")
-        except Exception: pass
-
-        try:
-            df_1h = get_candles(sym, "1h", 24, ttl=600, min_bars=20, binance_only=True)
-            vol_24h = float((df_1h["volume"] * df_1h["close"]).sum())
-            liq_ok = vol_24h >= 1_000_000
-            if cfg.get("require_liquidity", True):
-                if not liq_ok:
-                    if debug: return dict(sym=sym, score=score, reasons=["رفض: سيولة"])
-                    return None
-                score += 2; reasons.append(f"LIQ ${vol_24h/1e6:.0f}M")
-            elif liq_ok: score += 2; reasons.append(f"LIQ ${vol_24h/1e6:.0f}M")
-        except Exception: pass
-
-        if cfg.get("require_alpha", False):
-            if sym not in ALPHA_COINS:
-                if debug: return dict(sym=sym, score=score, reasons=["رفض: ليست Alpha"])
-                return None
-            score += 2; reasons.append("ALPHA")
-        elif sym in ALPHA_COINS: score += 1; reasons.append("ALPHA")
-
-        min_s = cfg.get("min_score", 1)
-        if score < min_s:
-            if debug: return dict(sym=sym, score=score, reasons=reasons)
+        # الدستور: يجب أن تكون الدرجة A+ أو A
+        if res["grade"] not in ("A+", "A"):
+            if debug: return dict(sym=sym, score=0, reasons=[f"الدرجة {res['grade']} غير كافية"])
             return None
-
-        atr = min(float(r4["atr"]), current * 0.1)
-        price = current
-        sl_dist = max(price * 0.05, min(price * 0.08, atr * 2.5))
+            
+        side = res["side"]
+        price = res["price"]
+        atr = res["lv"]["atr"]
         
+        # الأهداف الدستورية: 5% / 10% / 15% / 25%
         if side == 1:
-            sl = price - sl_dist
+            sl = price * 0.95
             tps = [price * 1.05, price * 1.10, price * 1.15, price * 1.25]
         else:
-            sl = price + sl_dist
+            sl = price * 1.05
             tps = [price * 0.95, price * 0.90, price * 0.85, price * 0.75]
-        
-        risk = abs(price - sl)
-        if risk <= 0 or any(tp <= 0 for tp in tps): return None
-        tps.sort(reverse=(side == -1))
-        
-        return dict(sym=sym, side=side, score=score, reasons=reasons, price=price, atr=atr,
-                    sl=sl, tps=tps, risk=risk, trend_1d=trend_1d, trend_4h=trend_4h,
-                    change_7d=round(change_7d, 2), rsi=round(rsi_4h, 1), rvol=round(rvol, 2),
-                    source=df_4h.attrs.get("source", "binance_fut"))
+            
+        return dict(
+            sym=sym, side=side, score=100 if res["grade"] == "A+" else 80,
+            reasons=[f"العقل المركزي: {res['grade']}", f"اتجاه: {'صاعد' if res['trend'] in ('up','strong_up') else 'هابط'}"],
+            price=price, atr=atr, sl=sl, tps=tps,
+            risk=abs(price - sl), trend_1d=res["trend_d"], trend_4h=res["trend"],
+            change_7d=0, rsi=res["rsi"], rvol=1.0, source=res.get("source", "binance_fut")
+        )
     except Exception as e:
         log.error(f"golden_score err {sym}: {e}")
         return None
@@ -1694,10 +1580,10 @@ def build_social_text(res, platform="binance"):
     else:
         trade_link = coin_link(sym, res.get("source", "binance_fut"))
 
+    # هاشتاجين فقط
     coins = hot_coins_for(sym)
     other_coin = next((c for c in coins if c != sym), "BTC")
-    coin_tags = f"#{sym} #{other_coin}"
-    platform_tags = meta["tags"]
+    hashtags = f"#{sym} #{other_coin}"
 
     if platform == "twitter":
         text = (
@@ -1706,7 +1592,7 @@ def build_social_text(res, platform="binance"):
             f"🎯 {fmt(lv['tps'][0]['px'])} | {fmt(lv['tps'][1]['px'])} | {fmt(lv['tps'][2]['px'])}\n"
             f"🛑 {fmt(lv['sl'])}\n\n"
             f"👉 Trade here: {trade_link}\n\n"
-            f"{coin_tags}\n"
+            f"{hashtags}\n"
             f"⚠️ High risk / NFA"
         )
     else:
@@ -1720,7 +1606,7 @@ def build_social_text(res, platform="binance"):
             f"🛑 SL: {fmt(lv['sl'])}\n\n"
             f"👉 Trade here: {trade_link}\n\n"
             f"👍 Like | 🔁 Share | 👤 Follow\n\n"
-            f"{coin_tags} {platform_tags}\n\n"
+            f"{hashtags}\n\n"
             f"⚠️ High risk / Not financial advice"
         )
     return text
@@ -1728,7 +1614,6 @@ def build_social_text(res, platform="binance"):
 def keyboard_share_post(res):
     sym = res["sym"]
     
-    # روابط المتصفح (تيليجرام يرفض روابط التطبيقات المباشرة)
     platform_urls = {
         "binance": "https://www.binance.com/en/square/post/create",
         "bybit":   "https://www.bybit.com/en/copy-trading/",
@@ -2230,7 +2115,9 @@ def build_promo_post():
     for key, (name, url) in REFERRAL_LINKS.items():
         lines += [f"🔗 <b>{name}</b>", f"   <a href='{url}'>سجّل الآن واحصل على مكافآت</a>", ""]
     lines += ["━━━━━━━━━━━━━━━━━━━━━", "✅ رسوم منخفضة", "✅ سيولة عالية",
-              "✅ عقود فيوتشر احترافية", "✅ دعم فني 24/7", "", RISK_WARNING, f"👤 {BRAND}"]
+              "✅ عقود فيوتشر احترافية", "✅ دعم فني 24/7", 
+              "", "🎁 <b>للحصول على تجربة مجانية:</b> اكتب كلمة (تجربة) في الردود", 
+              "", RISK_WARNING, f"👤 {BRAND}"]
     return "\n".join(lines)
 
 async def autopost_loop(app):
@@ -2733,7 +2620,7 @@ async def cmd_daily(update, ctx):
     try:
         longs, shorts = await asyncio.to_thread(_build_daily_lists)
         if not longs and not shorts:
-            await wait.edit_text("🎯 لا توجد صفقات مطابقة."); return
+            await wait.edit_text("🎯 لا توجد صفقات مطابقة حالياً بمعايير العقل المركزي."); return
         await wait.delete()
         for idx, item in enumerate(longs, 1):
             txt = _format_daily_card(item["res"], f"🟢 LONG {idx}", item.get("change", 0), item.get("volume", 0))
@@ -3558,7 +3445,7 @@ async def post_init(app):
         asyncio.create_task(golden_loop(app)), asyncio.create_task(promo_loop(app)),
         asyncio.create_task(whale_hunter_loop(app)),
     ]
-    log.info("ryma v95 | max_open=%d | golden_cycle=%ds | min_score=%d | multi=%s | maint=%s",
+    log.info("ryma v96 | max_open=%d | golden_cycle=%ds | min_score=%d | multi=%s | maint=%s",
              MAX_OPEN, CYCLE_GOLDEN, get_golden_config().get("min_score",1), is_multi_exchange(), is_maintenance())
 
 async def post_shutdown(app):
